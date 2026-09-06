@@ -74,7 +74,7 @@ def get_current_user(
     except (JWTError, ValueError):
         raise credentials_exception
 
-    user = db.query(User).get(user_id)
+    user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise credentials_exception
     return user
@@ -95,7 +95,7 @@ def get_optional_current_user(
         if user_id_str is None:
             return None
         user_id = int(user_id_str)
-        user = db.query(User).get(user_id)
+        user = db.get(User, user_id)
         if user and user.is_active:
             return user
     except Exception:

@@ -28,6 +28,12 @@ class FarmContext:
     growth_stage: str | None = None
     sowing_date: str | None = None
 
+    # Crop profile (Phase 3)
+    irrigation: str | None = None
+    soil_type: str | None = None
+    farming_method: str | None = None
+    previous_crop: str | None = None
+
     # Weather
     temperature_c: float | None = None
     humidity_pct: float | None = None
@@ -43,6 +49,12 @@ class FarmContext:
     # Soil
     soil_moisture_m3m3: float | None = None
     soil_temperature_c: float | None = None
+
+    # Soil profile (Phase 6 — SoilGrids)
+    ph_topsoil: float | None = None
+    organic_carbon_g_per_kg: float | None = None
+    soil_moisture_7_28cm: float | None = None
+    soil_moisture_28_100cm: float | None = None
 
     # Climate anomaly (from NASA POWER historical baseline)
     temp_anomaly_c: float | None = None
@@ -64,6 +76,7 @@ class FarmHealthScore:
     weather: int = 0
     pest_risk: int = 0
     climate: int = 0
+    soil: int = 0
 
 
 @dataclass
@@ -166,13 +179,38 @@ def compute_health_score(ctx: FarmContext) -> FarmHealthScore:
 
     score.climate = max(0, min(100, climate_score))
 
+    # ── Soil Health (pH, organic carbon, moisture consistency) ───────────────
+    soil_score = 70  # baseline
+    if ctx.ph_topsoil is not None:
+        if ctx.ph_topsoil < 5.5 or ctx.ph_topsoil > 8.5:
+            soil_score -= 25  # strongly acidic or alkaline
+        elif ctx.ph_topsoil < 6.0 or ctx.ph_topsoil > 8.0:
+            soil_score -= 10  # mildly outside optimal
+
+    if ctx.organic_carbon_g_per_kg is not None:
+        if ctx.organic_carbon_g_per_kg < 4:
+            soil_score -= 20  # very low organic carbon
+        elif ctx.organic_carbon_g_per_kg < 8:
+            soil_score -= 10  # low organic carbon
+
+    # Multi-layer moisture divergence check
+    layers = [ctx.soil_moisture_m3m3, ctx.soil_moisture_7_28cm, ctx.soil_moisture_28_100cm]
+    present = [v for v in layers if v is not None]
+    if len(present) >= 2:
+        spread = max(present) - min(present)
+        if spread > 0.20:
+            soil_score -= 10  # large divergence → possible drainage issue
+
+    score.soil = max(0, min(100, soil_score))
+
     # ── Overall composite (weighted average) ──────────────────────────────────
     weights = {
-        "vegetation": 0.25,
-        "water": 0.25,
-        "weather": 0.20,
-        "pest_risk": 0.15,
-        "climate": 0.15,
+        "vegetation": 0.22,
+        "water": 0.20,
+        "weather": 0.18,
+        "pest_risk": 0.12,
+        "climate": 0.13,
+        "soil": 0.15,
     }
     score.overall = int(
         score.vegetation * weights["vegetation"]
@@ -180,6 +218,7 @@ def compute_health_score(ctx: FarmContext) -> FarmHealthScore:
         + score.weather * weights["weather"]
         + score.pest_risk * weights["pest_risk"]
         + score.climate * weights["climate"]
+        + score.soil * weights["soil"]
     )
     return score
 
@@ -219,11 +258,20 @@ Analyze the following farm telemetry and provide concise, actionable recommendat
 Farm Context:
 - Crop: {ctx.crop_name or 'Unknown'}
 - Growth Stage: {ctx.growth_stage or 'Unknown'}
+- Irrigation: {ctx.irrigation or 'Unknown'}
+- Soil Type: {ctx.soil_type or 'Unknown'}
+- Farming Method: {ctx.farming_method or 'Unknown'}
+- Previous Crop: {ctx.previous_crop or 'Unknown'}
 - Temperature: {ctx.temperature_c}°C
 - Humidity: {ctx.humidity_pct}%
 - Rainfall (recent): {ctx.rainfall_mm} mm
 - Rain Probability (next 48h): {ctx.rain_probability_pct}%
 - Soil Moisture: {ctx.soil_moisture_m3m3} m³/m³
+- Soil Temp: {ctx.soil_temperature_c}°C
+- Soil pH (topsoil): {ctx.ph_topsoil if ctx.ph_topsoil is not None else 'N/A'}
+- Soil Organic Carbon: {ctx.organic_carbon_g_per_kg if ctx.organic_carbon_g_per_kg is not None else 'N/A'} g/kg
+- Soil Moisture (7-28cm): {ctx.soil_moisture_7_28cm if ctx.soil_moisture_7_28cm is not None else 'N/A'} m³/m³
+- Soil Moisture (28-100cm): {ctx.soil_moisture_28_100cm if ctx.soil_moisture_28_100cm is not None else 'N/A'} m³/m³
 - NDVI: {ctx.ndvi} (change: {ctx.ndvi_change})
 - ET0: {ctx.et0_mm} mm
 - Wind: {ctx.wind_speed_kmh} km/h
@@ -238,6 +286,7 @@ Farm Context:
 - Weather: {health.weather}
 - Pest Risk: {health.pest_risk}
 - Climate: {health.climate}
+- Soil: {health.soil}
 
 Respond in this exact JSON format:
 {{
@@ -364,10 +413,17 @@ def _build_data_summary(ctx: FarmContext, health: FarmHealthScore) -> dict:
     return {
         "crop": ctx.crop_name,
         "growth_stage": ctx.growth_stage,
+        "irrigation": ctx.irrigation,
+        "soil_type": ctx.soil_type,
+        "farming_method": ctx.farming_method,
+        "previous_crop": ctx.previous_crop,
         "temperature_c": ctx.temperature_c,
         "humidity_pct": ctx.humidity_pct,
         "rainfall_mm": ctx.rainfall_mm,
         "soil_moisture_m3m3": ctx.soil_moisture_m3m3,
+        "soil_temperature_c": ctx.soil_temperature_c,
+        "ph_topsoil": ctx.ph_topsoil,
+        "organic_carbon_g_per_kg": ctx.organic_carbon_g_per_kg,
         "ndvi": ctx.ndvi,
         "ndvi_change": ctx.ndvi_change,
         "et0_mm": ctx.et0_mm,

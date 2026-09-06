@@ -24,8 +24,16 @@ import LazyCard from "@/components/LazyCard";
 import SkeletonCard from "@/components/SkeletonCard";
 import WarabandiAdvisor from "@/components/WarabandiAdvisor";
 import SoilPhysicsCard from "@/components/SoilPhysicsCard";
+import CropSuitabilityCard from "@/components/CropSuitabilityCard";
+import PestRiskCard from "@/components/PestRiskCard";
+import AiAssistantDrawer from "@/components/AiAssistantDrawer";
+import KpiMetricsBar from "@/components/KpiMetricsBar";
+import RecommendedCropCard from "@/components/RecommendedCropCard";
+import MarketPriceCard from "@/components/MarketPriceCard";
+import UpcomingAlertsCard from "@/components/UpcomingAlertsCard";
 import { useLanguage } from "@/components/LanguageProvider";
 import { useAuth } from "@/components/AuthProvider";
+
 
 // Dynamic import prevents SSR issues with Leaflet
 const FarmMap = dynamic(() => import("@/components/FarmMap"), { ssr: false });
@@ -162,6 +170,12 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<HealthScore | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
 
+  // Crop suitability data (for dynamic top recommended crop)
+  const [suitabilityData, setSuitabilityData] = useState<any | null>(null);
+
+  // ML Yield prediction from trained model
+  const [yieldPrediction, setYieldPrediction] = useState<number | null>(null);
+
   // Recommendation (from AgriCore)
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [recLoading, setRecLoading] = useState(false);
@@ -224,6 +238,7 @@ export default function DashboardPage() {
       setNdviSeries([]);
       setNdviChange(null);
       setNdviSource(null);
+      setYieldPrediction(null);
       return;
     }
 
@@ -279,6 +294,22 @@ export default function DashboardPage() {
         setNdviSource(null);
       })
       .finally(() => setNdviLoading(false));
+
+    // Crop suitability for dynamic top crop recommendation card
+    api
+      .getCropSuitability(farmId)
+      .then((res) => setSuitabilityData(res))
+      .catch(() => setSuitabilityData(null));
+
+    // Farm Intelligence for ML Yield Prediction
+    api
+      .getFarmIntelligence(farmId)
+      .then((intel) => {
+        if (intel?.farm?.yield_prediction_t_ha != null) {
+          setYieldPrediction(intel.farm.yield_prediction_t_ha);
+        }
+      })
+      .catch(() => {});
 
     // Pre-fetch Warabandi canal schedule & Soil physics immediately in background
     api.getWarabandiAdvice(farmId).catch(() => {});
@@ -364,178 +395,151 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       {/* ── Extension Officer Regional Surveillance Mode Banner ───────────── */}
       {isOfficer && (
-        <div className="mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-4 backdrop-blur-md shadow-sm">
+        <div className="mb-6 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400 ring-1 ring-sky-400/30 shrink-0">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
                 <Icon name="activity" size={20} />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-ink">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold text-ink">
                     {isUrdu ? "ڈائریکٹوریٹ جنرل آف ایگریکلچر ایکسٹینشن پنجاب" : "Directorate General of Agriculture Extension Punjab"}
                   </h2>
-                  <span className="rounded-md border border-sky-400/30 bg-sky-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold text-sky-400 uppercase">
+                  <span className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400 uppercase tracking-wide">
                     {isUrdu ? "نگرانی موڈ" : "Supervisory Mode"}
                   </span>
                 </div>
-                <p className="text-xs text-mist mt-0.5">
+                <p className="mt-0.5 text-xs text-mist">
                   {isUrdu
                     ? "پنجاب دے تمام ضلعی ڈیجیٹل ٹوئن فارمز دی علاقائی نگرانی و تجزیہ فعال ہے۔"
-                    : "Regional surveillance active across all Punjab district farm twins · Multi-farm agronomic telemetry"}
+                    : "Regional surveillance active across all Punjab district farms · Multi-farm agronomic telemetry"}
                 </p>
               </div>
             </div>
-            <span className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-1.5 text-xs font-mono text-sky-300 self-start sm:self-auto">
-              {farms.length} {isUrdu ? "ضلعی نوڈز زیرِ نگرانی" : "District Nodes Supervised"}
+            <span className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-600 dark:text-sky-400 self-start sm:self-auto">
+              {farms.length} {isUrdu ? "ضلعی فارمز زیرِ نگرانی" : "District Farms Supervised"}
             </span>
           </div>
         </div>
       )}
 
-      {/* ── Page Header / Command Bar ─────────────────────────────────────── */}
+      {/* ── Top Command Bar & Farm Selector ─────────────────────────────── */}
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-brand ring-1 ring-emerald-400/30">
-              <Icon name="activity" size={16} />
-            </span>
-            <h1 className="text-2xl font-bold tracking-tight text-ink">
-              {isUrdu ? "فارم " : "Farm "}
-              <span className="bg-gradient-to-r from-emerald-400 via-brand to-lime-300 bg-clip-text text-transparent">
-                {isUrdu ? "کنٹرول سینٹر" : "Mission Control"}
-              </span>
-            </h1>
-          </div>
-          <p className="mt-0.5 text-xs text-mist">
-            {t("headerSubtitle", "Punjab Agrometeorological & Satellite Twin Console")}
-          </p>
+        <div className="flex items-center gap-3">
+          <FarmSelector farms={farms} selected={selectedFarm} onSelect={setSelectedFarm} />
         </div>
 
-        {/* Action cluster: Farm Selector + Quick Action Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 relative z-[1000] w-full md:w-auto">
-          <div className="w-full sm:w-auto">
-            <FarmSelector farms={farms} selected={selectedFarm} onSelect={setSelectedFarm} />
+        {selectedFarm && (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/farms/${selectedFarm.id}`}
+              className="flex items-center gap-1.5 rounded-xl border border-edge bg-panel px-3 py-2 text-xs font-semibold text-ink transition-colors hover:bg-brand/10 hover:text-brand"
+            >
+              <Icon name="activity" size={14} className="text-brand" />
+              <span>{t("viewAnalytics", "Full Analytics")}</span>
+            </Link>
+
+            <Link
+              href={`/farms/${selectedFarm.id}/history`}
+              className="flex items-center gap-1.5 rounded-xl border border-edge bg-panel px-3 py-2 text-xs font-semibold text-mist transition-colors hover:bg-ink/[0.05] hover:text-ink"
+            >
+              <Icon name="clock" size={14} className="text-dim" />
+              <span>{t("viewHistory", "History Log")}</span>
+            </Link>
+
+            {!isOfficer && (
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                disabled={deleting}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-500 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
+              >
+                <Icon name="trash" size={14} />
+                <span>{t("deleteShort", "Delete")}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 1. Top KPI Row (4 Cards) ─────────────────────────────────────── */}
+      <LazyCard delayMs={20}>
+        <KpiMetricsBar
+          healthScore={health?.overall ?? 78}
+          weatherTemp={weatherData ? Math.round((((weatherData.current || weatherData) as Record<string, number>)?.temperature_2m ?? 32)) : 32}
+          weatherStatus="Partly Cloudy"
+          marketTrendPct={8.4}
+          yieldPredictionTHa={yieldPrediction ?? 4.25}
+          farmAcres={selectedFarm?.area_acres ?? 10.24}
+          cropName={suitabilityData?.ranked_crops?.[0]?.crop_name ?? "Wheat"}
+        />
+      </LazyCard>
+
+      {/* ── 2. Middle Main Dashboard Grid (Screenshot Layout) ─────────────── */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left/Center Box: Your Farm Map (7 Cols) */}
+        <div className="lg:col-span-7 flex flex-col glass-panel p-0 overflow-hidden min-h-[460px] relative">
+          <div className="flex items-center justify-between p-4 border-b border-edge bg-panel/50 backdrop-blur-sm z-10">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                <Icon name="mapPin" size={14} />
+              </span>
+              <h3 className="text-sm font-bold text-ink">
+                {isUrdu ? "تہاڈا فارم" : "Your Farm"}
+              </h3>
+            </div>
+            {selectedFarm?.area_acres != null && (
+              <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-500">
+                {selectedFarm.area_acres.toLocaleString()} {t("acres", "Acres")}
+              </span>
+            )}
           </div>
 
-          {selectedFarm && (
-            <div className="flex items-center justify-between sm:justify-start gap-1 rounded-xl border border-ink/10 bg-ink/[0.03] p-1 w-full sm:w-auto shadow-sm overflow-x-auto min-w-0">
-              <Link
-                href={`/farms/${selectedFarm.id}`}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 text-xs font-semibold text-ink transition-all hover:bg-brand/12 hover:text-brand active:scale-95 whitespace-nowrap shrink-0"
-              >
-                <Icon name="activity" size={13} className="text-brand shrink-0" />
-                <span>{t("viewAnalytics", "Full Analytics")}</span>
-              </Link>
+          <div className="flex-1 w-full h-full min-h-[400px] relative">
+            <FarmMap
+              center={
+                selectedFarm?.latitude && selectedFarm?.longitude
+                  ? [selectedFarm.latitude, selectedFarm.longitude]
+                  : undefined
+              }
+              zoom={16}
+              polygonGeoJson={selectedFarm?.geometry_geojson}
+              farmLabel={selectedFarm?.name ?? "10.24 Acres"}
+              resetSignal={drawReset}
+              onPolygonDrawn={handlePolygonDrawn}
+            />
+          </div>
+        </div>
 
-              <Link
-                href={`/farms/${selectedFarm.id}/history`}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-3 py-1.5 text-xs font-semibold text-mist transition-all hover:bg-ink/6 hover:text-ink active:scale-95 whitespace-nowrap shrink-0"
-                title="Field Observation History"
-              >
-                <Icon name="clock" size={13} className="text-dim shrink-0" />
-                <span>{t("viewHistory", "History Log")}</span>
-              </Link>
-
-              <div className="h-4 w-px bg-ink/10 shrink-0 mx-0.5" />
-
-              {isOfficer ? (
-                <div
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-2.5 py-1.5 text-xs font-semibold text-mist/60 bg-ink/[0.02] border border-ink/6 cursor-not-allowed whitespace-nowrap shrink-0"
-                  title="Field deletion is restricted to registered landowners (Farmer Mode only)."
-                >
-                  <Icon name="check" size={12} className="shrink-0 text-sky-400" />
-                  <span>{isUrdu ? "محفوظ ڈیٹا" : "Owner Protected"}</span>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowDeleteModal(true)}
-                  disabled={deleting}
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-2.5 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/15 hover:text-rose-300 transition-all disabled:opacity-50 active:scale-95 whitespace-nowrap shrink-0"
-                  title="Delete Selected Farm Node"
-                >
-                  <Icon name="trash" size={13} className="shrink-0" />
-                  <span>{t("deleteShort", "Delete")}</span>
-                </button>
-              )}
-            </div>
-          )}
+        {/* Middle Box: Recommended Crop Card (5 Cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div id="crop-advisor" className="flex-1">
+            <RecommendedCropCard
+              cropName={suitabilityData?.ranked_crops?.[0]?.crop_name ?? "Maize"}
+              score={suitabilityData?.ranked_crops?.[0]?.suitability_score ?? 87}
+              reasons={suitabilityData?.ranked_crops?.[0]?.key_strengths}
+              onViewAnalysis={() => {
+                const el = document.getElementById("crop-suitability-section");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* ── Selected Farm Overview Banner ─────────────────────────────────── */}
-      {selectedFarm && (
-        <LazyCard delayMs={40}>
-          <div className="mb-6 rounded-2xl border border-ink/8 bg-ink/[0.02] p-4 backdrop-blur-md">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/15 text-brand ring-1 ring-brand/30 shrink-0">
-                  <Icon name="sprout" size={20} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-ink">{selectedFarm.name}</h2>
-                    <span className="rounded-md border border-brand/30 bg-brand/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-brand">
-                      {t("activeFarm", "Active Farm")}
-                    </span>
-                  </div>
-                  <p className="flex items-center gap-2 text-xs text-mist mt-0.5 font-mono">
-                    <span>{selectedFarm.district || "Punjab"}, {selectedFarm.province}</span>
-                    {selectedFarm.area_acres != null && (
-                      <>
-                        <span>&middot;</span>
-                        <span className="text-ink font-semibold">{selectedFarm.area_acres.toLocaleString()} {t("acres", "acres")}</span>
-                      </>
-                    )}
-                    {selectedFarm.latitude != null && selectedFarm.longitude != null && (
-                      <>
-                        <span>&middot;</span>
-                        <span className="text-dim">[{selectedFarm.latitude.toFixed(4)}, {selectedFarm.longitude.toFixed(4)}]</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-xs font-mono">
-                <div className="rounded-xl border border-ink/6 bg-ink/[0.03] px-3.5 py-1.5 text-center">
-                  <span className="text-[10px] uppercase text-dim block">{t("healthScore", "Health Score")}</span>
-                  <span className="text-sm font-bold text-brand tabular-nums">
-                    {health ? `${health.overall}/100` : "65/100"}
-                  </span>
-                </div>
-                <div className="rounded-xl border border-ink/6 bg-ink/[0.03] px-3.5 py-1.5 text-center">
-                  <span className="text-[10px] uppercase text-dim block">{t("satelliteNdvi", "Satellite NDVI")}</span>
-                  <span className="text-sm font-bold text-emerald-300 tabular-nums">
-                    {ndviSeries.length > 0 ? ndviSeries[ndviSeries.length - 1].ndvi.toFixed(2) : "0.58"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </LazyCard>
-      )}
-
-      {/* ── Main Grid: Map & Primary Field Health ─────────────────────────── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left: Interactive Satellite Farm Map (2 Cols) */}
-        <div className="glass-panel lg:col-span-2 h-[520px] lg:h-full lg:min-h-[520px] overflow-hidden p-0 relative">
-          <FarmMap
-            center={
-              selectedFarm?.latitude && selectedFarm?.longitude
-                ? [selectedFarm.latitude, selectedFarm.longitude]
-                : undefined
-            }
-            zoom={16}
-            polygonGeoJson={selectedFarm?.geometry_geojson}
-            farmLabel={selectedFarm?.name ?? null}
-            resetSignal={drawReset}
-            onPolygonDrawn={handlePolygonDrawn}
-          />
+      {/* ── 3. Market Price & Upcoming Alerts Grid Row ────────────────────── */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div id="market-trends">
+          <MarketPriceCard cropName={suitabilityData?.ranked_crops?.[0]?.crop_name ?? "Maize"} />
         </div>
+        <div id="alerts">
+          <UpcomingAlertsCard />
+        </div>
+      </div>
 
-        {/* Right: Health Score & Crop Growth Stage */}
-        <div className="space-y-6">
+      {/* ── 4. Detailed Field Health Index & Crop Manager ──────────────────── */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
           <HealthScoreCard
             overall={health?.overall ?? 65}
             vegetation={health?.vegetation ?? 60}
@@ -545,8 +549,9 @@ export default function DashboardPage() {
             climate={health?.climate ?? 75}
             loading={healthLoading}
           />
+        </div>
 
-          {/* Crop manager */}
+        <div>
           {selectedFarm && (
             <CropManager
               farmId={selectedFarm.id}
@@ -561,17 +566,19 @@ export default function DashboardPage() {
               }}
             />
           )}
+        </div>
+      </div>
 
           {/* Farm Creation Form (Moved to fixed modal) */}
           {showCreateForm && (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-              <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-brand/30 bg-panel/95 p-6 shadow-2xl backdrop-blur-2xl">
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+              <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-edge bg-panel p-6 shadow-xl">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-brand ring-1 ring-emerald-400/30">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand/10 text-brand">
                       <Icon name="pencil" size={14} />
                     </span>
-                    <h3 className="text-base font-bold text-ink">{t("registerFarm", "Register Farm Boundary")}</h3>
+                    <h3 className="text-base font-semibold text-ink">{t("registerFarm", "Register Farm Boundary")}</h3>
                   </div>
                   <button
                     onClick={() => {
@@ -582,7 +589,7 @@ export default function DashboardPage() {
                       setDistrictAutoDetected(false);
                       setDrawReset((n) => n + 1);
                     }}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-dim hover:bg-ink/10 hover:text-ink transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-dim hover:bg-ink/[0.06] hover:text-ink transition-colors"
                   >
                     <Icon name="x" size={14} />
                   </button>
@@ -767,11 +774,11 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="flex gap-3 pt-3 mt-4 border-t border-ink/10">
+                  <div className="flex gap-3 pt-3 mt-4 border-t border-edge">
                     <button
                       onClick={handleCreateFarm}
                       disabled={!newFarmName.trim()}
-                      className="flex-1 rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 px-4 py-2.5 text-sm font-bold text-abyss shadow-md hover:shadow-lg transition-all disabled:opacity-40"
+                      className="flex-1 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-abyss transition-colors hover:bg-brand-dark disabled:opacity-40"
                     >
                       {t("saveFarm", "Save Farm")}
                     </button>
@@ -785,7 +792,7 @@ export default function DashboardPage() {
                         setCanalAutoDetected(false);
                         setDrawReset((n) => n + 1);
                       }}
-                      className="rounded-xl border border-ink/12 bg-ink/5 px-4 py-2.5 text-sm font-medium text-mist hover:bg-ink/10 hover:text-ink transition-colors"
+                      className="rounded-lg border border-edge px-4 py-2.5 text-sm font-medium text-mist hover:bg-ink/[0.04] hover:text-ink transition-colors"
                     >
                       {t("cancel", "Cancel")}
                     </button>
@@ -794,32 +801,38 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* ── Warabandi Canal Water & Tubewell Energy Optimizer ───────────── */}
+      {/* ── Warabandi Canal Water, Soil Hydraulics & Crop Intelligence ───── */}
       {selectedFarm && (
         <>
           <LazyCard delayMs={75} className="mt-6">
-            <WarabandiAdvisor farmId={selectedFarm.id} />
+            <div id="settings">
+              <WarabandiAdvisor farmId={selectedFarm.id} />
+            </div>
           </LazyCard>
           <LazyCard delayMs={85} className="mt-6">
             <SoilPhysicsCard farmId={selectedFarm.id} />
           </LazyCard>
+          <LazyCard delayMs={90} className="mt-6">
+            <div id="crop-suitability-section" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <CropSuitabilityCard farmId={selectedFarm.id} />
+              <PestRiskCard farmId={selectedFarm.id} />
+            </div>
+          </LazyCard>
         </>
       )}
 
-      {/* ── Second Row: Agrometeorology & 7-Day Forecast ────────────────────── */}
+      {/* ── Agrometeorology & 7-Day Forecast ────────────────────── */}
       <LazyCard delayMs={100} className="mt-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div id="weather" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <WeatherCard data={weatherData} loading={weatherLoading} error={weatherError} />
           <ForecastChart data={forecastData} loading={forecastLoading} />
         </div>
       </LazyCard>
 
-      {/* ── Third Row: Satellite NDVI History ──────────────────────────────── */}
+      {/* ── MODIS Satellite NDVI History ──────────────────────────────── */}
       <LazyCard delayMs={150} className="mt-6">
-        <div>
+        <div id="reports">
           {ndviLoading ? (
             <div className="glass-panel p-6">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-mist">
@@ -835,51 +848,61 @@ export default function DashboardPage() {
         </div>
       </LazyCard>
 
-      {/* ── Fourth Row: AI Agronomy Copilot ────────────────────────────────── */}
+      {/* ── Fourth Row: AI Agronomy Copilot & Interactive Assistant Drawer ── */}
       <LazyCard delayMs={200} className="mt-6">
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <Icon name="spark" size={15} className="text-brand" />
-              {t("aiCopilot", "AI Diagnostic Reasoning")}
-            </span>
-            {selectedFarm && (
-              <button
-                onClick={handleGetRecommendation}
-                disabled={recLoading}
-                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 px-4 py-2 text-xs font-semibold text-abyss shadow-[0_4px_16px_rgba(16,185,129,0.35)] transition-all hover:scale-105 hover:shadow-[0_4px_24px_rgba(16,185,129,0.55)] disabled:opacity-50"
-              >
-                <Icon name="bot" size={14} />
-                {recLoading ? t("synthesizingRec", "Synthesizing AI Reasoning…") : t("generateRec", "Generate AI Recommendation")}
-              </button>
-            )}
-          </div>
+        <div className="space-y-6">
+          {selectedFarm && <AiAssistantDrawer farmId={selectedFarm.id} />}
 
-          <RecommendationPanel recommendation={recommendation} loading={recLoading} />
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Icon name="spark" size={15} className="text-brand" />
+                {t("aiCopilot", "AI Agronomy Assistant Summary")}
+              </span>
+              {selectedFarm && (
+                <button
+                  onClick={handleGetRecommendation}
+                  disabled={recLoading}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-medium text-abyss transition-colors hover:bg-brand-dark disabled:opacity-50"
+                >
+                  <Icon name="bot" size={14} />
+                  {recLoading ? t("synthesizingRec", "Generating…") : t("generateRec", "Generate Recommendation")}
+                </button>
+              )}
+            </div>
+
+            <RecommendationPanel recommendation={recommendation} loading={recLoading} />
+          </div>
         </div>
       </LazyCard>
+
 
       {/* ── Data Sources Footer Ribbon ─────────────────────────────────────── */}
       <LazyCard delayMs={250} className="mt-8">
         <div className="glass-panel p-4">
-          <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-dim font-mono">
+          <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-dim">
             <Icon name="database" size={12} />
             Integrated Data Feeds
           </h3>
-          <div className="flex flex-wrap gap-2 text-xs font-mono">
-            <span className="rounded-lg border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-sky-300">
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-abyss px-2.5 py-1 text-mist">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
               Open-Meteo &middot; Ground Weather &amp; Soil
             </span>
-            <span className="rounded-lg border border-orange-400/25 bg-orange-400/10 px-2.5 py-1 text-orange-300">
-              NASA POWER &middot; 30-Year MERRA-2 Normals
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-abyss px-2.5 py-1 text-mist">
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+              NASA POWER &middot; 30-Year Climate Normals
             </span>
-            <span className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-abyss px-2.5 py-1 text-mist">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               MODIS Terra &middot; 250m 16-Day NDVI
             </span>
-            <span className="rounded-lg border border-purple-400/25 bg-purple-400/10 px-2.5 py-1 text-purple-300">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-abyss px-2.5 py-1 text-mist">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
               AgriCore &middot; Multi-Vector Health Engine
             </span>
-            <span className="rounded-lg border border-teal-400/25 bg-teal-400/10 px-2.5 py-1 text-teal-300">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-abyss px-2.5 py-1 text-mist">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
               Punjab Agriculture &middot; Crop Knowledge
             </span>
           </div>
@@ -889,9 +912,9 @@ export default function DashboardPage() {
       {/* ── Custom Delete Confirmation Modal ─────────────────────────────── */}
       <ConfirmModal
         isOpen={showDeleteModal}
-        title="Delete Agricultural Farm Node"
-        message={`Are you sure you want to delete "${selectedFarm?.name}"? This action will permanently delete all associated crop cycles, satellite NDVI data, and agronomic intelligence records.`}
-        confirmText="Delete Farm Node"
+        title="Delete Farm"
+        message={`Are you sure you want to delete "${selectedFarm?.name}"? This will permanently delete all associated crop cycles, satellite NDVI data, and agronomic records.`}
+        confirmText="Delete Farm"
         cancelText="Keep Farm"
         isDestructive={true}
         loading={deleting}

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import HeaderNav from "@/components/HeaderNav";
-import Footer from "@/components/Footer";
+import AppShell from "@/components/AppShell";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
@@ -10,7 +10,10 @@ import { AuthGuard } from "@/components/AuthGuard";
 import "./globals.css";
 
 export const viewport: Viewport = {
-  themeColor: "#070c09",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f8f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1115" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -63,8 +66,9 @@ export default function RootLayout({
                 } else {
                   document.documentElement.classList.remove('dark')
                 }
-                if (localStorage.agritwin_language === 'ur') {
-                  document.documentElement.lang = 'ur';
+                var lang = localStorage.agritwin_language;
+                if (lang === 'ur' || lang === 'pa') {
+                  document.documentElement.lang = lang;
                   document.documentElement.dir = 'rtl';
                   document.documentElement.classList.add('lang-urdu');
                 }
@@ -78,20 +82,7 @@ export default function RootLayout({
           <LanguageProvider>
             <AuthProvider>
               <AuthGuard>
-                {/* ── Offline Network Status Banner ────────────────────────────────── */}
-                <OfflineBanner />
-
-                {/* ── Top Navigation ─────────────────────────────────────────────── */}
-                <HeaderNav />
-
-                {/* ── Main Content ───────────────────────────────────────────────── */}
-                <main className="flex-1">{children}</main>
-
-                {/* ── PWA Install Prompt Listener ─────────────────────────────────── */}
-                <ServiceWorkerRegistration />
-
-                {/* ── Global Footer ─────────────────────────────────────────────── */}
-                <Footer />
+                <AppShell>{children}</AppShell>
               </AuthGuard>
             </AuthProvider>
           </LanguageProvider>

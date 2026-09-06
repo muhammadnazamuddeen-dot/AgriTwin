@@ -13,44 +13,43 @@ export default function Footer() {
       : "http://127.0.0.1:8000/docs";
 
   return (
-    <footer className="border-t border-ink/8 bg-abyss/80 backdrop-blur-md py-8 text-xs text-dim">
+    <footer className="border-t border-edge py-8 text-sm text-mist">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Brand & Mission */}
           <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-            <Link href="/" className="flex items-center gap-2 group">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-brand ring-1 ring-emerald-400/30 group-hover:scale-105 transition-all">
-                <Icon name="sprout" size={15} strokeWidth={2.4} />
+            <Link href="/" className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-abyss">
+                <Icon name="sprout" size={14} strokeWidth={2.2} />
               </span>
-              <span className="text-sm font-bold tracking-tight text-ink">
+              <span className="text-sm font-semibold tracking-tight text-ink">
                 Agri<span className="text-brand">Twin</span> AI
               </span>
             </Link>
-            <span className="hidden sm:inline text-ink/20">|</span>
-            <span className="text-mist text-xs">
+            <span className="hidden sm:inline text-edge">|</span>
+            <span className="text-xs">
               {isUrdu
-                ? "پنجاب ڈیجیٹل ٹوئن زرعی پلیٹ فارم — انڈس بیسن واٹر نیٹ ورک"
-                : "Pakistan Precision Agriculture & Indus Basin Digital Twin"}
+                ? "پنجاب ڈیجیٹل ٹوئن زرعی پلیٹ فارم"
+                : "Pakistan Precision Agriculture & Digital Twin Platform"}
             </span>
           </div>
 
-          {/* Nav Links: Dashboard, Farms, About, API Docs */}
-          <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-6 font-medium text-xs">
+          {/* Nav Links */}
+          <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-medium">
             <Link href="/" className="text-mist hover:text-brand transition-colors">
-              {isUrdu ? "ڈیش بورڈ" : "Mission Control"}
+              {isUrdu ? "ڈیش بورڈ" : "Dashboard"}
             </Link>
             <Link href="/farms" className="text-mist hover:text-brand transition-colors">
-              {isUrdu ? "فارمز ہب" : "Farms Hub"}
+              {isUrdu ? "فارمز" : "Farms"}
             </Link>
-            <Link href="/about" className="text-mist hover:text-brand font-semibold transition-colors flex items-center gap-1">
-              <Icon name="info" size={12} className="text-brand" />
-              <span>{isUrdu ? "پلیٹ فارم تعارف" : "About Platform"}</span>
+            <Link href="/about" className="text-mist hover:text-brand transition-colors">
+              {isUrdu ? "پلیٹ فارم تعارف" : "About"}
             </Link>
             <a
               href={docsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-mist hover:text-brand font-semibold transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-mist hover:text-brand transition-colors"
             >
               <span>{isUrdu ? "اے پی آئی دستاویزات" : "API Docs"}</span>
               <Icon name="externalLink" size={11} className="text-dim" />
@@ -58,15 +57,12 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Bottom Sub-row: Telemetry & Provenance */}
-        <div className="mt-6 pt-5 border-t border-ink/6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-dim font-mono">
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-            <span>Punjab Telemetry Live · Open-Meteo · MODIS Terra · ISRIC SoilGrids</span>
-          </div>
-          <div>
-            <span>AgriCore v1.0 · Hackathon Edition · MIT License</span>
-          </div>
+        {/* Bottom row */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-edge pt-5 text-xs text-dim">
+          <span>
+            {isUrdu ? "ڈیٹا ذرائع" : "Data"} · Open-Meteo · MODIS Terra · ISRIC SoilGrids · NASA POWER
+          </span>
+          <span>AgriTwin · MIT License</span>
         </div>
       </div>
     </footer>

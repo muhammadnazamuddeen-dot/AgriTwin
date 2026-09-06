@@ -2,9 +2,8 @@
 
 import datetime
 import pytest
-import agricore
-import crop_knowledge
-from agricore import FarmContext, FarmHealthScore
+from app.core.engine import agricore, crop_knowledge
+from app.core.engine.agricore import FarmContext, FarmHealthScore
 
 
 def test_phenology_auto_derivation():

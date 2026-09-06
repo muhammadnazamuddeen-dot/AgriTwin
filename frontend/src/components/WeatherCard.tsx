@@ -11,11 +11,11 @@ interface WeatherCardProps {
 }
 
 function getAqiStatus(pm2_5: number | null, isUrdu = false): { label: string; color: string; bg: string; ring: string } {
-  if (pm2_5 == null) return { label: isUrdu ? "نامعلوم" : "Unknown", color: "text-dim", bg: "bg-ink/6", ring: "ring-ink/10" };
-  if (pm2_5 <= 35) return { label: isUrdu ? "صاف ہوا" : "Good Air", color: "text-emerald-300", bg: "bg-emerald-500/15", ring: "ring-emerald-400/30" };
-  if (pm2_5 <= 75) return { label: isUrdu ? "ہلکی سموگ" : "Moderate Smog", color: "text-amber-300", bg: "bg-amber-500/15", ring: "ring-amber-400/30" };
-  if (pm2_5 <= 150) return { label: isUrdu ? "نقصان دہ سموگ" : "Unhealthy Smog", color: "text-orange-300", bg: "bg-orange-500/15", ring: "ring-orange-400/30" };
-  return { label: isUrdu ? "شدید خطرناک سموگ" : "Severe Smog Hazard", color: "text-rose-300", bg: "bg-rose-500/15", ring: "ring-rose-400/30" };
+  if (pm2_5 == null) return { label: isUrdu ? "نامعلوم" : "Unknown", color: "text-dim", bg: "bg-ink/[0.06]", ring: "ring-ink/10" };
+  if (pm2_5 <= 35) return { label: isUrdu ? "صاف ہوا" : "Good Air", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", ring: "ring-emerald-500/20" };
+  if (pm2_5 <= 75) return { label: isUrdu ? "ہلکی سموگ" : "Moderate Smog", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", ring: "ring-amber-500/20" };
+  if (pm2_5 <= 150) return { label: isUrdu ? "نقصان دہ سموگ" : "Unhealthy Smog", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-500/10", ring: "ring-orange-500/20" };
+  return { label: isUrdu ? "شدید خطرناک سموگ" : "Severe Smog Hazard", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10", ring: "ring-rose-500/20" };
 }
 
 export default function WeatherCard({ data, loading, error, airQuality }: WeatherCardProps) {
@@ -24,12 +24,12 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
   if (loading) {
     return (
       <div className="glass-panel p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-mist">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-mist">
           {t("currentWeather", "Live Weather & Soil Conditions")}
         </h3>
         <div className="flex flex-col items-center justify-center py-10">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent mb-2" />
-          <p className="text-xs text-dim font-mono">Syncing Open-Meteo feeds…</p>
+          <p className="text-xs text-dim">Loading weather data…</p>
         </div>
       </div>
     );
@@ -50,7 +50,7 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
   if (!data) {
     return (
       <div className="glass-panel p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-mist">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-mist">
           {t("currentWeather", "Live Weather & Soil Conditions")}
         </h3>
         <div className="rounded-xl border border-ink/6 bg-ink/[0.02] p-8 text-center">
@@ -132,20 +132,20 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
     ];
 
   return (
-    <div className="glass-panel p-5 relative overflow-hidden">
+    <div className="glass-panel p-5 relative">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-500/15 text-sky-400 ring-1 ring-sky-400/30">
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
             <Icon name="cloudSun" size={14} />
           </span>
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-mist">
-            {t("currentWeather", "Agrometeorology & Soil Physics")}
+          <h3 className="text-xs font-medium uppercase tracking-wide text-mist">
+            {t("currentWeather", "Weather & Soil Conditions")}
           </h3>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="hud-pill text-sky-300 border-sky-400/25 bg-sky-500/10">
+          <span className="hud-pill">
             Open-Meteo
           </span>
         </div>
@@ -159,11 +159,11 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
             <Icon name="thermometer" size={22} />
           </span>
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-dim block">
+            <span className="text-[10px] uppercase tracking-wide text-dim block">
               Ambient Air Temp
             </span>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold font-mono tabular-nums text-ink">
+              <span className="text-2xl font-semibold tabular-nums text-ink">
                 {temp != null ? `${temp.toFixed(1)}°` : "—"}
               </span>
               <span className="text-xs text-mist font-medium">Celsius</span>
@@ -177,15 +177,15 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
             <Icon name="activity" size={20} />
           </span>
           <div className="min-w-0">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-dim block">
+            <span className="text-[10px] uppercase tracking-wide text-dim block">
               Air Quality / Smog Index
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ${aqi.bg} ${aqi.color} ${aqi.ring}`}>
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${aqi.bg} ${aqi.color} ${aqi.ring}`}>
                 {aqi.label}
               </span>
               {airQuality?.pm2_5 != null && (
-                <span className="font-mono text-[10px] text-dim">
+                <span className="text-[10px] tabular-nums text-dim">
                   PM2.5: {airQuality.pm2_5}
                 </span>
               )}
@@ -206,7 +206,7 @@ export default function WeatherCard({ data, loading, error, airQuality }: Weathe
               <Icon name={m.icon} size={13} className="text-dim shrink-0" />
             </div>
 
-            <p className="text-base font-bold font-mono tabular-nums text-ink my-0.5">
+            <p className="text-base font-semibold tabular-nums text-ink my-0.5">
               {m.value}
             </p>
 

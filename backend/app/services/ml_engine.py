@@ -21,7 +21,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score
 from sqlalchemy.orm import Session
 
-import agricore
+from app.core.engine import agricore
 from app.models import Crop, HealthScoreSnapshot, SatelliteObservation, WeatherRecord
 
 import os

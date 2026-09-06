@@ -1,0 +1,54 @@
+# ── AgriTwin AI · Soup CLI Fine-Tuning Specification ──────────────────────────
+# Official Soup CLI v0.72.4+ Schema (https://trysoup.dev/docs/getting-started)
+# Configured for consumer GPU (e.g. NVIDIA RTX 3050/3060/4060/H100 or Colab T4)
+
+project:
+  name: agritwin-ai-copilot
+  version: "1.1.0"
+  description: "Pakistan Precision Agriculture Diagnostic LLM Copilot"
+
+model:
+  base_model: "Qwen/Qwen2.5-Coder-3B-Instruct"
+  task: "sft"
+  quantization: "4bit"           # NF4 4-bit layer streaming quantization
+  torch_dtype: "bfloat16"
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+dataset:
+  train_file: "../training/train.jsonl"
+  validation_file: "../training/validation.jsonl"
+  test_file: "../training/test.jsonl"
+  format: "instruction_input_output"
+
+training:
+  epochs: 3
+  learning_rate: 2.0e-4
+  batch_size: 2
+  gradient_accumulation_steps: 4
+  max_seq_length: 2048
+  optimizer: "adamw_torch"
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  stream_layers: true
+  stream_vram_probe: true
+
+evaluation:
+  eval_steps: 50
+  save_steps: 100
+  metric_for_best_model: "eval_loss"
+
+output:
+  output_dir: "../models/agritwin_lora_adapter"
+  save_best: true

@@ -1,7 +1,6 @@
-export type Language = "en" | "ur";
+export type Language = "en" | "ur" | "pa";
 
-export const translations: Record<Language, Record<string, string>> = {
-  en: {
+const enDict: Record<string, string> = {
     // ── Navigation & System ──
     brandName: "AgriTwin AI",
     brandTagline: "Punjab Precision Agriculture Platform",
@@ -222,8 +221,9 @@ export const translations: Record<Language, Record<string, string>> = {
     confirmDeleteMsg: "Are you sure you want to delete this farm? This action will permanently remove all associated crop records, telemetry history, satellite observations, and AI diagnostic models.",
     confirmBtn: "Delete Farm Node",
     cancelBtn: "Keep Farm",
-  },
-  ur: {
+  };
+
+const urDict: Record<string, string> = {
     // ── Navigation & System (Clear Punjab Shahmukhi / Punjabi-Urdu) ──
     brandName: "ایگری ٹوئن (AgriTwin)",
     brandTagline: "پنجاب ڈیجیٹل فارمنگ تے زرعی پلیٹ فارم",
@@ -444,7 +444,12 @@ export const translations: Record<Language, Record<string, string>> = {
     confirmDeleteMsg: "کی تسی واقعی اس فارم نوں ختم کرنا چاہندے ہو؟ ایہ عمل واپس نہیں ہو سکدا تے تمام سیٹلائٹ، فصلی تے تشخیصی ریکارڈ ختم ہو جائے گا۔",
     confirmBtn: "فارم حذف کرو",
     cancelBtn: "فارم محفوظ رکھو",
-  },
+  };
+
+export const translations: Record<Language, Record<string, string>> = {
+  en: enDict,
+  ur: urDict,
+  pa: urDict,
 };
 
 export const stageTranslationMap: Record<string, { en: string; ur: string }> = {

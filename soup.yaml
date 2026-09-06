@@ -1,0 +1,16 @@
+base: Qwen/Qwen3-0.6B
+task: sft
+
+data:
+  train: ./data/train.jsonl
+  format: alpaca
+
+training:
+  epochs: 3
+  lr: 2e-5
+  batch_size: auto
+  quantization: 4bit
+
+  lora:
+    r: 64
+    alpha: 16

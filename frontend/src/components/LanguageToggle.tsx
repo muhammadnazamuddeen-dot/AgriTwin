@@ -20,7 +20,7 @@ export default function LanguageToggle() {
       </button>
 
       <button
-        onClick={() => setLanguage("ur")}
+        onClick={() => setLanguage("pa")}
         className={`flex items-center gap-1 rounded-lg px-2.5 py-1 transition-all font-urdu ${isUrdu
             ? "bg-panel text-brand shadow-sm ring-1 ring-brand/30 font-bold"
             : "text-mist hover:text-ink"

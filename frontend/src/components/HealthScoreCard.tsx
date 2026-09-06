@@ -15,17 +15,17 @@ interface HealthScoreProps {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 75) return "text-emerald-400";
-  if (score >= 50) return "text-amber-400";
-  if (score >= 25) return "text-orange-400";
-  return "text-rose-400";
+  if (score >= 75) return "text-emerald-600 dark:text-emerald-400";
+  if (score >= 50) return "text-amber-600 dark:text-amber-400";
+  if (score >= 25) return "text-orange-600 dark:text-orange-400";
+  return "text-rose-600 dark:text-rose-400";
 }
 
 function barColor(score: number): string {
-  if (score >= 75) return "bg-gradient-to-r from-emerald-500 to-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.4)]";
-  if (score >= 50) return "bg-gradient-to-r from-amber-500 to-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.4)]";
-  if (score >= 25) return "bg-gradient-to-r from-orange-500 to-orange-300 shadow-[0_0_8px_rgba(249,115,22,0.4)]";
-  return "bg-gradient-to-r from-rose-500 to-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.4)]";
+  if (score >= 75) return "bg-emerald-500";
+  if (score >= 50) return "bg-amber-500";
+  if (score >= 25) return "bg-orange-500";
+  return "bg-rose-500";
 }
 
 function gaugeStroke(score: number): string {
@@ -39,35 +39,35 @@ function statusBadge(score: number, isUrdu = false): { label: string; bg: string
   if (score >= 75) {
     return {
       label: isUrdu ? "بہترین حالت" : "Optimal Condition",
-      bg: "bg-emerald-500/15",
-      text: "text-emerald-300",
-      ring: "ring-emerald-400/30",
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-600 dark:text-emerald-400",
+      ring: "ring-emerald-500/20",
       hint: isUrdu ? "فصل دی ہریالی، پانی، درجہ حرارت تے سیٹلائٹ انڈیکس سب تسلی بخش نیں۔" : "All crop, moisture, temperature, and satellite vegetation indices are in healthy balance.",
     };
   }
   if (score >= 50) {
     return {
       label: isUrdu ? "ہلکا دباؤ" : "Moderate Stress",
-      bg: "bg-amber-500/15",
-      text: "text-amber-300",
-      ring: "ring-amber-400/30",
+      bg: "bg-amber-500/10",
+      text: "text-amber-600 dark:text-amber-400",
+      ring: "ring-amber-500/20",
       hint: isUrdu ? "زمین دی نمی یا درجہ حرارت وچ تبدیلی دیکھی گئی اے۔ آبپاشی تے دھیان دیو۔" : "Soil moisture or temperature deviations detected — review irrigation and weather guidance.",
     };
   }
   if (score >= 25) {
     return {
       label: isUrdu ? "زیادہ خطرہ" : "High Risk",
-      bg: "bg-orange-500/15",
-      text: "text-orange-300",
-      ring: "ring-orange-400/30",
+      bg: "bg-orange-500/10",
+      text: "text-orange-600 dark:text-orange-400",
+      ring: "ring-orange-500/20",
       hint: isUrdu ? "پانی دی شدید کمی یا شدید گرمی فصل نوں متاثر کر سکدی اے۔" : "Multiple agronomic metrics are outside optimal zones. Action required.",
     };
   }
   return {
     label: isUrdu ? "انتہائی فوری توجہ" : "Critical Alert",
-    bg: "bg-rose-500/15",
-    text: "text-rose-300",
-    ring: "ring-rose-400/30",
+    bg: "bg-rose-500/10",
+    text: "text-rose-600 dark:text-rose-400",
+    ring: "ring-rose-500/20",
     hint: isUrdu ? "فصل نوں فوری خطرہ لاحق اے۔ الرٹس تے دی گئی سفارشات تے عمل کرو۔" : "Severe moisture, heat, or pest pressure detected. Immediate intervention recommended.",
   };
 }
@@ -137,16 +137,13 @@ export default function HealthScoreCard({
   const badge = statusBadge(pct, isUrdu);
 
   return (
-    <div className="glass-panel p-5 relative overflow-hidden">
-      {/* Background ambient lighting - radial gradient (no GPU blur filter glitch) */}
-      <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.12)_0%,transparent_70%)]" />
-
+    <div className="glass-panel p-5 relative">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-mist">
+        <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-mist">
           <Icon name="activity" size={13} className="text-brand" />
           {t("cropHealthTitle", "Field Health Index")}
         </h3>
-        <span className="font-mono text-[10px] text-dim">AgriCore Engine</span>
+        <span className="text-[10px] text-dim">AgriCore Engine</span>
       </div>
 
       {/* Hero Radial Gauge & Status */}
@@ -195,10 +192,10 @@ export default function HealthScoreCard({
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
             ) : (
               <>
-                <span className={`text-3xl font-bold font-mono tracking-tight ${scoreColor(pct)}`}>
+                <span className={`text-3xl font-semibold tabular-nums tracking-tight ${scoreColor(pct)}`}>
                   {displayScore}
                 </span>
-                <span className="text-[9px] font-mono uppercase tracking-widest text-dim">
+                <span className="text-[9px] uppercase tracking-wide text-dim">
                   / 100
                 </span>
               </>
@@ -221,7 +218,7 @@ export default function HealthScoreCard({
 
       {/* Sub-Dimension Breakdown with interactive diagnostic hints */}
       <div className="space-y-2.5 pt-1">
-        <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-dim">
+        <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-dim">
           <span>Health Dimensions</span>
           <span>Score (0–100)</span>
         </div>
@@ -242,7 +239,7 @@ export default function HealthScoreCard({
                 />
                 {d.label}
               </span>
-              <span className={`font-mono font-semibold tabular-nums ${scoreColor(d.score)}`}>
+              <span className={`font-semibold tabular-nums ${scoreColor(d.score)}`}>
                 {d.score}
               </span>
             </div>

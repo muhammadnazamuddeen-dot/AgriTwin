@@ -101,6 +101,10 @@ export interface Crop {
   expected_harvest_date: string | null;
   growth_stage: string | null;
   season: string | null;
+  irrigation: string | null;
+  soil_type: string | null;
+  farming_method: string | null;
+  previous_crop: string | null;
 }
 
 export interface WeatherData {
@@ -171,6 +175,7 @@ export interface FarmIntelligence {
     latitude: number;
     longitude: number;
     geometry: string | null;
+    yield_prediction_t_ha?: number | null;
   };
   crop: {
     name: string;
@@ -269,6 +274,34 @@ export interface WeatherObservation {
   rainfall_mm: number | null;
   wind_speed_kmh: number | null;
   cloud_cover_pct: number | null;
+  et0_mm: number | null;
+  source: string;
+}
+
+export interface MonthlyClimateSummary {
+  month: string;
+  mean_temp_c: number | null;
+  mean_humidity_pct: number | null;
+  total_precip_mm: number | null;
+}
+
+export interface ClimateSnapshot {
+  id: number;
+  farm_id: number;
+  baseline_period: string;
+  historical_mean_temp_c: number | null;
+  temp_anomaly_c: number | null;
+  historical_mean_humidity_pct: number | null;
+  humidity_anomaly_pct: number | null;
+  historical_total_precip_mm: number | null;
+  created_at: string;
+}
+
+export interface ClimateSummary {
+  farm_id: number;
+  current_anomaly: FarmIntelligence["climate"];
+  monthly_summaries: MonthlyClimateSummary[];
+  anomaly_history: ClimateSnapshot[];
 }
 
 export interface HistoryAlert {
@@ -394,15 +427,24 @@ export const api = {
     request<void>(`/farms/${id}`, { method: "DELETE" }),
 
   // Crops
-  addCrop: (farmId: number, crop: { crop_name: string; sowing_date?: string; season?: string }) =>
+  addCrop: (farmId: number, crop: {
+    crop_name: string; sowing_date?: string; season?: string;
+    irrigation?: string; soil_type?: string; farming_method?: string; previous_crop?: string;
+  }) =>
     request<Crop>(`/farms/${farmId}/crops`, { method: "POST", body: JSON.stringify(crop) }),
   listCrops: (farmId: number) => request<Crop[]>(`/farms/${farmId}/crops`),
+  updateCrop: (farmId: number, cropId: number, updates: Partial<Crop>) =>
+    request<Crop>(`/farms/${farmId}/crops/${cropId}`, { method: "PUT", body: JSON.stringify(updates) }),
 
   // Weather
   getWeatherForecast: (farmId: number, days = 7) =>
     request<WeatherData>(`/weather/forecast/${farmId}?days=${days}`),
   getCurrentWeather: (farmId: number) =>
     request<WeatherData>(`/weather/current/${farmId}`),
+  getWeatherRecords: (farmId: number, daysBack = 7) =>
+    request<WeatherObservation[]>(`/weather/records/${farmId}?days_back=${daysBack}`),
+  getClimateSummary: (farmId: number) =>
+    request<ClimateSummary>(`/weather/climate/${farmId}`),
 
   // Satellite
   getNdvi: (farmId: number, daysBack = 30) =>
@@ -456,6 +498,30 @@ export const api = {
   getPhenologyGdd: (farmId: number) =>
     request<CropPhenologyGddData>(`/analytics/phenology-gdd/${farmId}`),
 
+  // Phase 7: Crop Suitability Engine
+  getCropSuitability: (farmId: number, crop?: string, month?: number) => {
+    let url = `/analytics/crop-suitability/${farmId}`;
+    const params = new URLSearchParams();
+    if (crop) params.append("crop", crop);
+    if (month) params.append("month", month.toString());
+    if (params.toString()) url += `?${params.toString()}`;
+    return request<CropSuitabilityResponse>(url);
+  },
+
+  // Phase 8: Pest & Disease Risk Engine
+  getPestDiseaseRisk: (farmId: number, crop?: string) => {
+    let url = `/analytics/pest-disease-risk/${farmId}`;
+    if (crop) url += `?crop=${encodeURIComponent(crop)}`;
+    return request<PestRiskResponse>(url);
+  },
+
+  // Phase 9: AI Advisor Question Answering
+  askAiAdvisor: (farmId: number, question: string) =>
+    request<AskAiResponse>("/analytics/ask-ai", {
+      method: "POST",
+      body: JSON.stringify({ farm_id: farmId, question }),
+    }),
+
   // Health
   healthCheck: () => request<{ status: string }>("/health").catch(() => ({ status: "offline" })),
 
@@ -471,3 +537,54 @@ export const api = {
   logout: () => request<{ status: string }>("/auth/logout", { method: "POST" }),
   getMe: () => request<AuthUser>("/auth/me"),
 };
+
+// ── Types for Phase 7, 8, 9 ────────────────────────────────────────────────
+export interface CropSuitabilityItem {
+  crop_name: string;
+  suitability_score: number;
+  category: string;
+  soil_score: number;
+  climate_score: number;
+  water_score: number;
+  season_score: number;
+  limiting_factors: string[];
+  recommendations: string[];
+}
+
+export interface CropSuitabilityResponse {
+  farm_id: number;
+  evaluated_at: string;
+  target_crop?: string;
+  ranked_crops: CropSuitabilityItem[];
+}
+
+export interface PestRiskItem {
+  pest_or_disease_name: string;
+  category: string;
+  risk_level: string;
+  risk_score: number;
+  trigger_conditions: string[];
+  organic_control: string;
+  chemical_control: string;
+  preventative_measures: string[];
+}
+
+export interface PestRiskResponse {
+  farm_id: number;
+  evaluated_at: string;
+  crop_name: string;
+  growth_stage?: string;
+  overall_pest_risk: string;
+  risks: PestRiskItem[];
+}
+
+export interface AskAiResponse {
+  recommendation: string;
+  reasoning: string;
+  recommendation_ur?: string;
+  reasoning_ur?: string;
+  confidence: number;
+  risk_level: string;
+  data_summary: Record<string, unknown>;
+}
+

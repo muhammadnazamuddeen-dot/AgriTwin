@@ -64,64 +64,69 @@ export default function LoginPage() {
     <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         {/* Brand Header */}
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-600 text-abyss shadow-[0_0_24px_rgba(52,211,153,0.4)]">
-            <Icon name="sprout" size={24} strokeWidth={2.4} />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-abyss">
+            <Icon name="sprout" size={24} strokeWidth={2.2} />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Agri<span className="text-brand">Twin</span> AI
           </h1>
-          <p className="mt-0.5 text-xs text-mist font-mono">
+          <p className="mt-1 text-sm text-mist">
             Punjab Agriculture Intelligence Platform
           </p>
         </div>
 
         {/* Main Card */}
-        <div className="glass-panel p-6 sm:p-7 relative overflow-hidden shadow-xl">
-          {/* Subtle top glow bar */}
-          <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-emerald-500 via-brand to-sky-400" />
-
-          {/* Lowkey 1-Tap Demo Switcher */}
-          <div className="mb-5 rounded-xl border border-ink/8 bg-ink/[0.02] p-2.5">
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-dim flex items-center gap-1.5">
-                <Icon name="spark" size={11} className="text-brand" />
+        <div className="glass-panel p-6 sm:p-7">
+          {/* Demo Accounts */}
+          <div className="mb-5 rounded-xl border border-edge bg-abyss p-3">
+            <div className="mb-2 flex items-center justify-between px-0.5">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-mist">
+                <Icon name="spark" size={12} className="text-brand" />
                 <span>Demo Accounts</span>
               </span>
-              <span className="text-[10px] font-mono text-dim">1-Tap Login</span>
+              <span className="text-[11px] text-dim">One-tap login</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleInstantDemoLogin("farmer@agritwin.pk", "farmer")}
                 disabled={demoLoading !== null}
-                className="flex items-center justify-between rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15 transition-all active:scale-95 disabled:opacity-50"
+                className="flex items-center justify-between rounded-lg border border-emerald-600/20 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
               >
-                <span className="flex items-center gap-1.5 truncate">
-                  <span>🌱</span>
-                  <span className="truncate">Farmer</span>
+                <span className="flex items-center gap-2">
+                  <Icon name="wheat" size={14} />
+                  <span>Farmer</span>
                 </span>
-                <span className="text-[10px] opacity-70">→</span>
+                {demoLoading === "farmer" ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <span className="text-xs opacity-50">→</span>
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => handleInstantDemoLogin("officer@agritwin.pk", "officer")}
                 disabled={demoLoading !== null}
-                className="flex items-center justify-between rounded-lg border border-sky-500/25 bg-sky-500/8 px-2.5 py-1.5 text-xs font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/15 transition-all active:scale-95 disabled:opacity-50"
+                className="flex items-center justify-between rounded-lg border border-sky-600/20 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition-colors disabled:opacity-50"
               >
-                <span className="flex items-center gap-1.5 truncate">
-                  <span>🏛️</span>
-                  <span className="truncate">Officer</span>
+                <span className="flex items-center gap-2">
+                  <Icon name="activity" size={14} />
+                  <span>Officer</span>
                 </span>
-                <span className="text-[10px] opacity-70">→</span>
+                {demoLoading === "officer" ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <span className="text-xs opacity-50">→</span>
+                )}
               </button>
             </div>
           </div>
 
           {/* Form Header */}
-          <div className="mb-4 flex items-center justify-between border-b border-ink/6 pb-3">
-            <h2 className="text-sm font-bold text-ink">
-              {mode === "login" ? "Sign In to Mission Control" : "Register Custom Account"}
+          <div className="mb-4 flex items-center justify-between border-b border-edge pb-3">
+            <h2 className="text-sm font-semibold text-ink">
+              {mode === "login" ? "Sign in to your account" : "Create a new account"}
             </h2>
             <button
               type="button"
@@ -129,54 +134,54 @@ export default function LoginPage() {
                 setMode(mode === "login" ? "register" : "login");
                 setError(null);
               }}
-              className="text-[11px] font-semibold text-brand hover:underline"
+              className="text-xs font-medium text-brand hover:underline"
             >
               {mode === "login" ? "Create Account" : "Sign In instead"}
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
               <>
                 {/* Role Switcher for Custom Registration */}
                 <div>
-                  <label className="mb-1.5 block text-[11px] font-medium text-mist">
+                  <label className="mb-1.5 block text-xs font-medium text-mist">
                     Select Account Role
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setSelectedRole("farmer")}
-                      className={`flex items-center gap-2 rounded-xl p-2.5 border text-xs font-semibold transition-all ${selectedRole === "farmer"
-                          ? "border-brand/40 bg-brand/15 text-brand shadow-sm"
-                          : "border-ink/8 bg-ink/[0.02] text-mist hover:text-ink hover:bg-ink/5"
+                      className={`flex items-center gap-2 rounded-lg p-2.5 border text-left transition-colors ${selectedRole === "farmer"
+                          ? "border-brand/40 bg-brand/10"
+                          : "border-edge bg-abyss hover:bg-ink/[0.03]"
                         }`}
                     >
-                      <Icon name="wheat" size={14} />
-                      <div className="text-left">
-                        <div className="text-xs">Punjab Farmer</div>
-                        <div className="text-[9px] text-mist font-normal">Field Landowner</div>
+                      <Icon name="wheat" size={14} className={selectedRole === "farmer" ? "text-brand" : "text-dim"} />
+                      <div>
+                        <div className={`text-xs font-medium ${selectedRole === "farmer" ? "text-brand" : "text-mist"}`}>Punjab Farmer</div>
+                        <div className="text-[10px] text-dim">Field Landowner</div>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedRole("extension_officer")}
-                      className={`flex items-center gap-2 rounded-xl p-2.5 border text-xs font-semibold transition-all ${selectedRole === "extension_officer"
-                          ? "border-sky-400/40 bg-sky-500/15 text-sky-400 shadow-sm"
-                          : "border-ink/8 bg-ink/[0.02] text-mist hover:text-ink hover:bg-ink/5"
+                      className={`flex items-center gap-2 rounded-lg p-2.5 border text-left transition-colors ${selectedRole === "extension_officer"
+                          ? "border-sky-500/40 bg-sky-500/10"
+                          : "border-edge bg-abyss hover:bg-ink/[0.03]"
                         }`}
                     >
-                      <Icon name="activity" size={14} />
-                      <div className="text-left">
-                        <div className="text-xs">Agri Officer</div>
-                        <div className="text-[9px] text-mist font-normal">Supervisory Mode</div>
+                      <Icon name="activity" size={14} className={selectedRole === "extension_officer" ? "text-sky-600 dark:text-sky-400" : "text-dim"} />
+                      <div>
+                        <div className={`text-xs font-medium ${selectedRole === "extension_officer" ? "text-sky-600 dark:text-sky-400" : "text-mist"}`}>Agri Officer</div>
+                        <div className="text-[10px] text-dim">Supervisory Mode</div>
                       </div>
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-mist">
+                  <label className="mb-1 block text-xs font-medium text-mist">
                     Full Name
                   </label>
                   <input
@@ -184,20 +189,20 @@ export default function LoginPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
-                    className="input-theme px-3.5 py-2 text-xs"
+                    className="input-theme px-3.5 py-2 text-sm"
                     placeholder="e.g. Tariq Mahmood"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-[11px] font-medium text-mist">
+                  <label className="mb-1 block text-xs font-medium text-mist">
                     Phone Number (Optional)
                   </label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="input-theme px-3.5 py-2 text-xs"
+                    className="input-theme px-3.5 py-2 text-sm"
                     placeholder="03001234567"
                   />
                 </div>
@@ -205,7 +210,7 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-mist">
+              <label className="mb-1 block text-xs font-medium text-mist">
                 Email Address
               </label>
               <input
@@ -213,13 +218,13 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="input-theme px-3.5 py-2 text-xs"
+                className="input-theme px-3.5 py-2 text-sm"
                 placeholder="user@agritwin.pk"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-mist">
+              <label className="mb-1 block text-xs font-medium text-mist">
                 Password
               </label>
               <input
@@ -227,13 +232,13 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="input-theme px-3.5 py-2 text-xs"
+                className="input-theme px-3.5 py-2 text-sm"
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs text-rose-400">
+              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs text-rose-600 dark:text-rose-400">
                 {error}
               </div>
             )}
@@ -241,10 +246,10 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 py-2.5 text-xs font-bold text-abyss shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand py-2.5 text-sm font-medium text-abyss transition-colors hover:bg-brand-dark disabled:opacity-50"
             >
               {loading ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-abyss border-t-transparent" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : mode === "login" ? (
                 "Sign In"
               ) : (

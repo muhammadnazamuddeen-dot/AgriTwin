@@ -32,8 +32,20 @@ function calculatePolygonAreaAcres(points: LatLngTuple[]): number {
   return Math.round((areaM2 / 4046.86) * 10) / 10;
 }
 
-/** Best-effort district lookup from coordinates via OSM Nominatim. */
+/** Best-effort district lookup from coordinates via backend reverse-geocode API & OSM Nominatim fallback. */
 async function reverseGeocodeDistrict(lat: number, lng: number): Promise<string | undefined> {
+  // First attempt backend endpoint with built-in Pakistan district centroid resolution
+  try {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
+    const res = await fetch(`${apiBase}/farms/reverse-geocode?lat=${lat}&lon=${lng}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.district) return data.district;
+    }
+  } catch {
+    /* fallback to OSM */
+  }
+
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&lat=${lat}&lon=${lng}`
@@ -458,7 +470,10 @@ export default function FarmMap({
 
   // ── GPS Locate ────────────────────────────────────────────────────────────
   const locateMe = () => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
     const L = leafletRef.current;
     setLocating(true);
     try {
@@ -466,28 +481,49 @@ export default function FarmMap({
     } catch {
       /* ignore */
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const c: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
-        try {
-          mapRef.current?.flyTo(c, 17, { duration: 1 });
-          if (L && mapRef.current && userLayerRef.current) {
-            L.circleMarker(c, {
-              radius: 8,
-              color: "#ffffff",
-              weight: 2,
-              fillColor: "#10b981",
-              fillOpacity: 1,
-            }).addTo(userLayerRef.current);
-          }
-        } catch {
-          /* ignore */
+
+    const handleSuccess = (pos: GeolocationPosition) => {
+      const c: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+      try {
+        mapRef.current?.flyTo(c, 16, { duration: 1 });
+        if (L && mapRef.current && userLayerRef.current) {
+          L.circleMarker(c, {
+            radius: 8,
+            color: "#ffffff",
+            weight: 2,
+            fillColor: "#10b981",
+            fillOpacity: 1,
+          }).addTo(userLayerRef.current);
         }
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+      } catch {
+        /* ignore */
+      }
+      setLocating(false);
+    };
+
+    const handleError = () => {
+      // Retry with standard accuracy if high accuracy timed out or failed
+      navigator.geolocation.getCurrentPosition(
+        handleSuccess,
+        () => {
+          // If browser location fails completely, smoothly center map on farm / default center
+          const targetCenter: LatLngTuple = center ?? DEFAULT_CENTER;
+          try {
+            mapRef.current?.flyTo(targetCenter, 15, { duration: 1 });
+          } catch {
+            /* ignore */
+          }
+          setLocating(false);
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    };
+
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      timeout: 5000,
+      maximumAge: 30000,
+    });
   };
 
   // ── Custom Zoom Actions ───────────────────────────────────────────────────
@@ -548,12 +584,15 @@ export default function FarmMap({
                 disabled={drawnPoints.length < 3 || isFinishing}
                 className="flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-emerald-400 to-emerald-600 px-3 py-1.5 text-xs font-semibold text-abyss shadow-md transition-all disabled:opacity-40"
               >
-                {isFinishing ? (
-                  <span className="h-3 w-3 rounded-full border-2 border-abyss border-r-transparent animate-spin" />
-                ) : (
-                  <Icon name="check" size={13} strokeWidth={2.5} />
-                )}
-                {isFinishing ? "Processing..." : `Finish (${drawnPoints.length} pts)`}
+                <span className="flex h-4 w-4 items-center justify-center shrink-0">
+                  <span className={isFinishing ? "block" : "hidden"}>
+                    <span className="block h-3 w-3 rounded-full border-2 border-abyss border-r-transparent animate-spin" />
+                  </span>
+                  <span className={isFinishing ? "hidden" : "block"}>
+                    <Icon name="check" size={13} strokeWidth={2.5} />
+                  </span>
+                </span>
+                <span>{isFinishing ? "Processing..." : `Finish (${drawnPoints.length} pts)`}</span>
               </button>
               <button
                 onClick={undoPoint}

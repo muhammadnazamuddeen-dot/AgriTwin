@@ -4,20 +4,26 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-# Ensure all engine modules are resolvable in serverless environments
-_app_dir = Path(__file__).resolve().parent
-_backend_dir = _app_dir.parent
-for _p in [str(_backend_dir), str(_app_dir)]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 from app.config import settings
-from app.database import Base, engine
-from app.routers import analytics, auth, farms, intelligence, satellite, weather
+from app.database import Base, engine, get_db
+from app.routers import (
+    ai_explain,
+    analytics,
+    auth,
+    crops,
+    farms,
+    intelligence,
+    market,
+    opportunities,
+    prices,
+    satellite,
+    soil,
+    weather,
+)
 
 
 @asynccontextmanager
@@ -32,34 +38,41 @@ async def lifespan(app: FastAPI):
     # Seed demo users on a fresh production/local database (password: password123)
     pwd_hash = "$2b$12$1kLIODq1P4Z1OwrkeE1QmOVaJg.aGb.Zq5lN41rbldfYN6UcSovNS"
     db = SessionLocal()
+
+    def _ensure_demo_user(name: str, email: str, phone: str, role: str) -> User | None:
+        """Create a demo user if missing.  Tolerates phone uniqueness conflicts
+        (e.g. leftover test accounts) by falling back to a NULL phone so the
+        demo login always works."""
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            return user
+        phone_taken = db.query(User).filter(User.phone == phone).first() is not None
+        try:
+            user = User(
+                name=name,
+                email=email,
+                phone=None if phone_taken else phone,
+                hashed_password=pwd_hash,
+                role=role,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return user
+        except Exception as e:
+            db.rollback()
+            print(f"Startup demo seed note ({email}): {e}")
+            return None
+
     try:
-        farmer = db.query(User).filter(User.email == "farmer@agritwin.pk").first()
-        if not farmer:
-            farmer = User(
-                name="Ahmad Khan (Punjab Farmer)",
-                email="farmer@agritwin.pk",
-                phone="03001234567",
-                hashed_password=pwd_hash,
-                role="farmer",
-            )
-            db.add(farmer)
-            db.commit()
-            db.refresh(farmer)
+        farmer = _ensure_demo_user(
+            "Ahmad Khan (Punjab Farmer)", "farmer@agritwin.pk", "03001234567", "farmer"
+        )
+        _ensure_demo_user(
+            "Dr. Tariq Mahmood (Agri Officer)", "officer@agritwin.pk", "03019876543", "extension_officer"
+        )
 
-        officer = db.query(User).filter(User.email == "officer@agritwin.pk").first()
-        if not officer:
-            officer = User(
-                name="Dr. Tariq Mahmood (Agri Officer)",
-                email="officer@agritwin.pk",
-                phone="03019876543",
-                hashed_password=pwd_hash,
-                role="extension_officer",
-            )
-            db.add(officer)
-            db.commit()
-            db.refresh(officer)
-
-        if db.query(Farm).count() == 0:
+        if farmer and db.query(Farm).filter(Farm.user_id == farmer.id).count() == 0:
             farm1 = Farm(
                 user_id=farmer.id,
                 name="Okara Green Fields (چک 45 دیپالپور)",
@@ -141,23 +154,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix=settings.API_PREFIX)
 app.include_router(intelligence.router, prefix=settings.API_PREFIX)  # before farms (specific routes)
 app.include_router(farms.router, prefix=settings.API_PREFIX)
 app.include_router(weather.router, prefix=settings.API_PREFIX)
 app.include_router(satellite.router, prefix=settings.API_PREFIX)
+app.include_router(soil.router, prefix=settings.API_PREFIX)
 app.include_router(analytics.router, prefix=settings.API_PREFIX)
+app.include_router(ai_explain.router, prefix=settings.API_PREFIX)
+app.include_router(market.router, prefix=settings.API_PREFIX)
+app.include_router(crops.router, prefix=settings.API_PREFIX)
+app.include_router(prices.router, prefix=settings.API_PREFIX)
+app.include_router(opportunities.router, prefix=settings.API_PREFIX)
 
-# Health check also exposed under the API prefix (frontend calls /api/v1/health)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Health & Readiness checks exposed under root and API prefix (/api/v1/health, /api/v1/ready)
 health_router = APIRouter()
 
 
 @health_router.get("/health")
 def health_check_prefixed():
     return {"status": "ok"}
+
+
+@health_router.get("/ready")
+def ready_check_prefixed():
+    return {"status": "ready", "database": "connected"}
+
+
+@health_router.post("/assistant", response_model=ai_explain.AIExplainResponse)
+async def assistant_prefixed(req: ai_explain.AIExplainRequest, db=Depends(get_db)):
+    return await ai_explain.explain_farm_intelligence(req, db)
 
 
 app.include_router(health_router, prefix=settings.API_PREFIX)
@@ -175,3 +204,9 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready_check():
+    return {"status": "ready", "database": "connected"}
+

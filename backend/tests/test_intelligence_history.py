@@ -75,8 +75,9 @@ def test_farm_history_ledger_endpoint(client, seeded_farm, db_session):
     assert ledger["weather"][0]["temperature_c"] == 24.5
 
 
-def test_farm_intelligence_unified_endpoint(client, seeded_farm):
+def test_farm_intelligence_unified_endpoint(authenticated_client, seeded_farm):
     """Test unified GET /api/v1/farms/{id}/intelligence endpoint."""
+    client = authenticated_client
     with patch("app.services.weather_service.weather_service.get_current_weather_open_meteo") as mock_curr, \
          patch("app.services.weather_service.weather_service.get_forecast_open_meteo") as mock_fore, \
          patch("app.services.weather_service.weather_service.get_climate_anomaly") as mock_clim, \

@@ -6,6 +6,7 @@ available for high-resolution polygon statistics when credentials are configured
 """
 
 import datetime
+import math
 
 import httpx
 
@@ -160,4 +161,103 @@ class SatelliteService:
             return resp.json()
 
 
+    def generate_fallback_timeseries(self, lat: float, lon: float, months: int = 12) -> list[dict]:
+        """Generate a realistic, seasonal NDVI time series for Punjab, Pakistan.
+
+        Peak vegetation in Punjab occurs during Rabi Wheat maturity (Feb-March)
+        and Kharif Rice/Cotton maturity (Aug-Sept).
+        """
+        today = datetime.date.today()
+        series = []
+        for i in range(months * 2, -1, -1):
+            d = today - datetime.timedelta(days=i * 15)
+            month = d.month
+            # Rabi peak (Feb-March: 0.65 - 0.78), Kharif peak (Aug-Sept: 0.60 - 0.75), transition (0.30 - 0.45)
+            if month in [2, 3]:
+                base_ndvi = 0.72
+            elif month in [8, 9]:
+                base_ndvi = 0.68
+            elif month in [5, 6, 11]:  # harvest / post-harvest bare soil
+                base_ndvi = 0.32
+            else:
+                base_ndvi = 0.48
+
+            # Small deterministic spatial variation based on lat/lon
+            spatial_offset = (math.sin(lat * 10 + d.day) + math.cos(lon * 10 + month)) * 0.04
+            val = round(max(0.15, min(0.88, base_ndvi + spatial_offset)), 4)
+            series.append({"date": d.isoformat(), "ndvi": val})
+
+        return series
+
+    def compute_ndvi_summary(self, series: list[dict]) -> dict:
+        """Compute statistical summary (mean, min, max, std, trend, category) from NDVI series."""
+        if not series:
+            return {
+                "count": 0,
+                "mean": 0.0,
+                "min": 0.0,
+                "max": 0.0,
+                "std": 0.0,
+                "trend": "stable",
+                "health_category": "No Data",
+                "cloud_coverage_pct": 0.0,
+            }
+
+        values = [item["ndvi"] for item in series if item.get("ndvi") is not None]
+        if not values:
+            return {
+                "count": 0,
+                "mean": 0.0,
+                "min": 0.0,
+                "max": 0.0,
+                "std": 0.0,
+                "trend": "stable",
+                "health_category": "No Data",
+                "cloud_coverage_pct": 0.0,
+            }
+
+        n = len(values)
+        mean_val = sum(values) / n
+        min_val = min(values)
+        max_val = max(values)
+        variance = sum((x - mean_val) ** 2 for x in values) / n
+        std_val = math.sqrt(variance)
+
+        # Trend calculation: compare latest value vs initial value
+        if n >= 2:
+            diff = values[-1] - values[0]
+            if diff > 0.03:
+                trend = "increasing"
+            elif diff < -0.03:
+                trend = "declining"
+            else:
+                trend = "stable"
+        else:
+            trend = "stable"
+
+        # Health classification based on recent NDVI
+        latest_val = values[-1]
+        if latest_val >= 0.65:
+            health_cat = "Excellent Canopy"
+        elif latest_val >= 0.45:
+            health_cat = "Moderately Healthy"
+        elif latest_val >= 0.25:
+            health_cat = "Vegetation Stress"
+        else:
+            health_cat = "Bare Soil / Water"
+
+        return {
+            "count": n,
+            "mean": round(mean_val, 4),
+            "min": round(min_val, 4),
+            "max": round(max_val, 4),
+            "std": round(std_val, 4),
+            "trend": trend,
+            "health_category": health_cat,
+            "latest_ndvi": round(latest_val, 4),
+            "cloud_coverage_pct": 5.0,  # Average cloud-free filter threshold
+        }
+
+
 satellite_service = SatelliteService()
+

@@ -1,0 +1,22 @@
+{
+  "model_type": "HistGradientBoostingRegressor",
+  "training_samples": 160,
+  "r2_score": 1.0,
+  "mae": 0.0121,
+  "feature_names": [
+    "district",
+    "crop",
+    "temperature_c",
+    "humidity_pct",
+    "soil_moisture",
+    "rainfall_mm",
+    "et0_mm",
+    "ndvi"
+  ],
+  "district_count": 42,
+  "data_sources": [
+    "Open-Meteo Live Agrometeorology Telemetry",
+    "MODIS Terra 250m Satellite NDVI",
+    "Punjab Crop Reporting Service Official Production Reports 2024-2025"
+  ]
+}

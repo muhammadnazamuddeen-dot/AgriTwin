@@ -28,7 +28,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem("agritwin_language") as Language | null;
-      if (saved === "en" || saved === "ur") {
+      if (saved === "en" || saved === "ur" || saved === "pa") {
         setLanguageState(saved);
       }
     } catch {}
@@ -40,8 +40,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem("agritwin_language", lang);
       document.documentElement.lang = lang;
-      document.documentElement.dir = lang === "ur" ? "rtl" : "ltr";
-      if (lang === "ur") {
+      const isRtl = lang === "ur" || lang === "pa";
+      document.documentElement.dir = isRtl ? "rtl" : "ltr";
+      if (isRtl) {
         document.documentElement.classList.add("lang-urdu");
       } else {
         document.documentElement.classList.remove("lang-urdu");
@@ -50,19 +51,21 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleLanguage = () => {
-    setLanguage(language === "en" ? "ur" : "en");
+    setLanguage(language === "en" ? "pa" : "en");
   };
+
+  const isRtl = language === "ur" || language === "pa";
 
   useEffect(() => {
     if (!mounted) return;
     document.documentElement.lang = language;
-    document.documentElement.dir = language === "ur" ? "rtl" : "ltr";
-    if (language === "ur") {
+    document.documentElement.dir = isRtl ? "rtl" : "ltr";
+    if (isRtl) {
       document.documentElement.classList.add("lang-urdu");
     } else {
       document.documentElement.classList.remove("lang-urdu");
     }
-  }, [language, mounted]);
+  }, [language, mounted, isRtl]);
 
   const t = (key: string, fallback?: string): string => {
     const dict = translations[language] || translations.en;
@@ -78,8 +81,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         setLanguage,
         toggleLanguage,
         t,
-        isUrdu: language === "ur",
-        dir: language === "ur" ? "rtl" : "ltr",
+        isUrdu: isRtl,
+        dir: isRtl ? "rtl" : "ltr",
       }}
     >
       {children}

@@ -1,0 +1,41 @@
+# Soup CLI Fine-Tuning & Model Training Configuration for AgriTwin AI
+project:
+  name: agritwin-ai-yield-engine
+  version: "0.1.0"
+  description: "Punjab Agricultural Telemetry & Yield Model trained via Soup CLI post-training framework"
+
+dataset:
+  name: punjab_agricultural_telemetry_2026
+  sources:
+    - name: open_meteo_live_telemetry
+      type: REST_API
+      url: "https://api.open-meteo.com/v1/forecast"
+    - name: modis_terra_ndvi
+      type: SATELLITE_COMPOSITE
+      resolution: 250m
+    - name: punjab_crs_crop_data
+      type: CSV
+      records: 160
+
+model:
+  task: tabular_yield_regression
+  base_architecture: HistGradientBoostingRegressor
+  features:
+    - district
+    - crop
+    - temperature_c
+    - humidity_pct
+    - soil_moisture
+    - rainfall_mm
+    - et0_mm
+    - ndvi
+  target: yield_t_ha
+
+training:
+  max_iter: 200
+  learning_rate: 0.08
+  random_state: 42
+  metrics:
+    - r2_score
+    - mean_absolute_error
+  output_dir: ./app/models

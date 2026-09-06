@@ -19,19 +19,22 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import (
     Alert,
+    ClimateSnapshot,
     Crop,
     Farm,
     HealthScoreSnapshot,
     Recommendation as RecModel,
+    SoilObservation,
+    SoilProfile,
     WeatherRecord,
 )
 from app.services.ml_engine import load_or_train, predict_forecast
 from app.services.ndvi_cache import get_ndvi_series_cached
-from app.services.weather_service import weather_service
+from app.services.soil_service import soil_service
+from app.services.weather_service import persist_current_weather, weather_service
+from app.services.yield_engine import get_yield_prediction
 
-import agricore
-import alerts as alert_engine
-import crop_knowledge
+from app.core.engine import agricore, crop_knowledge, alerts as alert_engine
 
 router = APIRouter(prefix="/farms", tags=["intelligence"])
 
@@ -39,7 +42,7 @@ MODIS_SOURCE = "MODIS Terra (MOD13Q1, 250m)"
 
 
 def _get_farm_or_404(db: Session, farm_id: int) -> Farm:
-    farm = db.query(Farm).get(farm_id)
+    farm = db.get(Farm, farm_id)
     if not farm:
         raise HTTPException(status_code=404, detail="Farm not found")
     if farm.latitude is None or farm.longitude is None:
@@ -54,6 +57,7 @@ def _build_context(
     forecast: dict,
     ndvi_series: list[dict],
     climate_anomaly: dict | None,
+    soil_profile: SoilProfile | None = None,
 ) -> agricore.FarmContext:
     et0 = None
     if "daily" in forecast and "et0_fao_evapotranspiration" in forecast["daily"]:
@@ -82,6 +86,10 @@ def _build_context(
         crop_name=latest_crop.crop_name if latest_crop else None,
         growth_stage=current_growth_stage,
         sowing_date=str(latest_crop.sowing_date) if latest_crop and latest_crop.sowing_date else None,
+        irrigation=latest_crop.irrigation if latest_crop else None,
+        soil_type=latest_crop.soil_type if latest_crop else None,
+        farming_method=latest_crop.farming_method if latest_crop else None,
+        previous_crop=latest_crop.previous_crop if latest_crop else None,
         temperature_c=current.get("temperature_2m"),
         humidity_pct=current.get("relative_humidity_2m"),
         rainfall_mm=current.get("precipitation"),
@@ -89,6 +97,10 @@ def _build_context(
         et0_mm=et0,
         soil_moisture_m3m3=current.get("soil_moisture_0_to_7cm"),
         soil_temperature_c=current.get("soil_temperature_0_to_7cm"),
+        ph_topsoil=soil_profile.ph_topsoil if soil_profile else None,
+        organic_carbon_g_per_kg=soil_profile.organic_carbon_g_per_kg if soil_profile else None,
+        soil_moisture_7_28cm=current.get("soil_moisture_7_to_28cm"),
+        soil_moisture_28_100cm=current.get("soil_moisture_28_to_100cm"),
         ndvi=ndvi,
         ndvi_change=ndvi_change,
         temp_anomaly_c=(climate_anomaly or {}).get("temp_anomaly_c"),
@@ -98,20 +110,90 @@ def _build_context(
 
 
 def _persist_weather_observation(farm: Farm, current: dict, db: Session):
-    """Save the current weather observation to the database."""
-    now = datetime.datetime.utcnow()
-    record = WeatherRecord(
+    """Save the current weather observation to the database (delegates to shared util)."""
+    persist_current_weather(farm, current, db)
+
+
+def _persist_climate_snapshot(farm_id: int, anomaly: dict | None, db: Session):
+    """Persist a climate anomaly snapshot, deduplicating by baseline_period."""
+    if not anomaly:
+        return
+    period = anomaly.get("baseline_period", "")
+    existing = (
+        db.query(ClimateSnapshot)
+        .filter(
+            ClimateSnapshot.farm_id == farm_id,
+            ClimateSnapshot.baseline_period == period,
+        )
+        .first()
+    )
+    if existing:
+        existing.historical_mean_temp_c = anomaly.get("historical_mean_temp_c")
+        existing.temp_anomaly_c = anomaly.get("temp_anomaly_c")
+        existing.historical_mean_humidity_pct = anomaly.get("historical_mean_humidity_pct")
+        existing.humidity_anomaly_pct = anomaly.get("humidity_anomaly_pct")
+        existing.historical_total_precip_mm = anomaly.get("historical_total_precip_mm")
+        db.commit()
+        return
+    snap = ClimateSnapshot(
+        farm_id=farm_id,
+        baseline_period=period,
+        historical_mean_temp_c=anomaly.get("historical_mean_temp_c"),
+        temp_anomaly_c=anomaly.get("temp_anomaly_c"),
+        historical_mean_humidity_pct=anomaly.get("historical_mean_humidity_pct"),
+        humidity_anomaly_pct=anomaly.get("humidity_anomaly_pct"),
+        historical_total_precip_mm=anomaly.get("historical_total_precip_mm"),
+    )
+    db.add(snap)
+    db.commit()
+
+
+def _persist_soil_observation(farm: Farm, current: dict, db: Session):
+    """Auto-persist soil observations with 30-min dedup."""
+    cutoff = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(minutes=30)
+    recent = (
+        db.query(SoilObservation)
+        .filter(SoilObservation.farm_id == farm.id, SoilObservation.date >= cutoff)
+        .first()
+    )
+    if recent:
+        return
+    obs = SoilObservation(
         farm_id=farm.id,
-        timestamp=now,
-        temperature_c=current.get("temperature_2m"),
-        humidity_pct=current.get("relative_humidity_2m"),
-        rainfall_mm=current.get("precipitation"),
-        wind_speed_kmh=current.get("wind_speed_10m"),
-        cloud_cover_pct=current.get("cloud_cover"),
+        date=datetime.datetime.now(datetime.UTC).replace(tzinfo=None),
+        soil_moisture_m3m3=current.get("soil_moisture_0_to_7cm"),
+        soil_temperature_c=current.get("soil_temperature_0_to_7cm"),
+        soil_moisture_7_28cm=current.get("soil_moisture_7_to_28cm"),
+        soil_moisture_28_100cm=current.get("soil_moisture_28_to_100cm"),
+        depth_cm=7,
         source="open-meteo",
     )
-    db.add(record)
+    db.add(obs)
     db.commit()
+
+
+async def _ensure_soil_profile(farm: Farm, db: Session) -> SoilProfile | None:
+    """Fetch and cache SoilGrids profile if not already stored for this farm."""
+    existing = db.query(SoilProfile).filter(SoilProfile.farm_id == farm.id).first()
+    if existing:
+        return existing
+    profile_data = await soil_service.get_soil_profile(farm.latitude, farm.longitude)
+    if not profile_data:
+        return None
+    profile = SoilProfile(
+        farm_id=farm.id,
+        ph_topsoil=profile_data.get("ph_topsoil"),
+        organic_carbon_g_per_kg=profile_data.get("organic_carbon_g_per_kg"),
+        clay_pct=profile_data.get("clay_pct"),
+        sand_pct=profile_data.get("sand_pct"),
+        silt_pct=profile_data.get("silt_pct"),
+        bulk_density_kg_dm3=profile_data.get("bulk_density_kg_dm3"),
+        source=profile_data.get("source", "soilgrids"),
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
 
 
 def _persist_recommendation(farm_id: int, rec, db: Session):
@@ -130,7 +212,7 @@ def _persist_alerts(farm_id: int, alert_list, db: Session):
     """Save detected alerts, skipping duplicates raised within the last 24 hours."""
     if not alert_list:
         return
-    since = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+    since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(hours=24)
     recent = {
         (a.category, a.severity, a.title)
         for a in db.query(Alert)
@@ -159,16 +241,29 @@ def _persist_alerts(farm_id: int, alert_list, db: Session):
 
 def _persist_score_snapshot(farm_id: int, score, db: Session):
     """Save a health-score snapshot (at most one per hour unless the score changes)."""
-    latest = (
-        db.query(HealthScoreSnapshot)
-        .filter(HealthScoreSnapshot.farm_id == farm_id)
-        .order_by(HealthScoreSnapshot.created_at.desc())
-        .first()
-    )
-    if latest:
-        fresh = (datetime.datetime.utcnow() - latest.created_at).total_seconds() < 3600
-        if fresh and latest.overall == score.overall:
-            return
+    try:
+        latest = (
+            db.query(HealthScoreSnapshot)
+            .filter(HealthScoreSnapshot.farm_id == farm_id)
+            .order_by(HealthScoreSnapshot.created_at.desc())
+            .first()
+        )
+        if latest and latest.created_at:
+            dt = latest.created_at
+            if isinstance(dt, str):
+                try:
+                    dt = datetime.datetime.fromisoformat(dt)
+                except Exception:
+                    dt = None
+            if hasattr(dt, "tzinfo") and dt and dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+            if isinstance(dt, datetime.datetime):
+                if abs((now - dt).total_seconds()) < 3600 and latest.overall == score.overall:
+                    return
+    except Exception:
+        pass
+
     db.add(HealthScoreSnapshot(
         farm_id=farm_id,
         overall=score.overall,
@@ -192,7 +287,7 @@ def _build_grounding(
 ) -> str | None:
     """Compact summary of this farm's own recorded history to ground the AI —
     past observations, alerts, previous advice, ML forecast, air quality."""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.UTC)
     since = now - datetime.timedelta(days=7)
     lines = []
 
@@ -240,7 +335,16 @@ def _build_grounding(
         .first()
     )
     if last_rec:
-        age_days = (now - last_rec.created_at).days if last_rec.created_at else 0
+        rec_dt = last_rec.created_at
+        if isinstance(rec_dt, str):
+            try:
+                rec_dt = datetime.datetime.fromisoformat(rec_dt)
+            except Exception:
+                rec_dt = None
+        if hasattr(rec_dt, "tzinfo") and rec_dt and rec_dt.tzinfo is not None:
+            rec_dt = rec_dt.replace(tzinfo=None)
+        now_dt = now.replace(tzinfo=None) if hasattr(now, "tzinfo") and now.tzinfo is not None else now
+        age_days = (now_dt - rec_dt).days if isinstance(rec_dt, datetime.datetime) else 0
         lines.append(
             f"PREVIOUS ADVICE ({age_days} day(s) ago, current score {score.overall}/100): "
             f"{last_rec.recommendation_text[:160]}"
@@ -312,6 +416,9 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
 
     # Persist observations
     _persist_weather_observation(farm, current, db)
+    _persist_climate_snapshot(farm.id, climate_anomaly, db)
+    _persist_soil_observation(farm, current, db)
+    soil_profile = await _ensure_soil_profile(farm, db)
 
     # Most recent crop
     latest_crop = (
@@ -319,7 +426,7 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
     )
 
     # Build context
-    ctx = _build_context(farm, latest_crop, current, forecast_data, ndvi_series, climate_anomaly)
+    ctx = _build_context(farm, latest_crop, current, forecast_data, ndvi_series, climate_anomaly, soil_profile)
 
     # Health score
     score = agricore.compute_health_score(ctx)
@@ -352,7 +459,22 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
             "et0_mm": _si(daily.get("et0_fao_evapotranspiration"), i),
         })
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.UTC)
+    
+    yield_pred = None
+    if latest_crop and latest_crop.crop_name:
+        yield_pred = get_yield_prediction(
+            farm.district,
+            latest_crop.crop_name,
+            telemetry={
+                "temperature_c": ctx.temperature_c,
+                "humidity_pct": ctx.humidity_pct,
+                "soil_moisture": ctx.soil_moisture_m3m3,
+                "rainfall_mm": ctx.rainfall_mm,
+                "et0_mm": ctx.et0_mm,
+                "ndvi": ctx.ndvi,
+            }
+        )
 
     return {
         "farm": {
@@ -364,6 +486,7 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
             "latitude": farm.latitude,
             "longitude": farm.longitude,
             "geometry": farm.geometry_geojson,
+            "yield_prediction_t_ha": yield_pred,
         },
         "crop": {
             "name": latest_crop.crop_name if latest_crop else None,
@@ -404,6 +527,16 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
         "soil": {
             "moisture_m3m3": ctx.soil_moisture_m3m3,
             "temperature_c": ctx.soil_temperature_c,
+            "moisture_7_28cm": ctx.soil_moisture_7_28cm,
+            "moisture_28_100cm": ctx.soil_moisture_28_100cm,
+            "profile": {
+                "ph_topsoil": soil_profile.ph_topsoil,
+                "organic_carbon_g_per_kg": soil_profile.organic_carbon_g_per_kg,
+                "clay_pct": soil_profile.clay_pct,
+                "sand_pct": soil_profile.sand_pct,
+                "silt_pct": soil_profile.silt_pct,
+                "bulk_density_kg_dm3": soil_profile.bulk_density_kg_dm3,
+            } if soil_profile else None,
             "source": "Open-Meteo",
         },
         "score": {
@@ -415,6 +548,7 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
                 "weather": score.weather,
                 "pest_risk": score.pest_risk,
                 "climate": score.climate,
+                "soil": score.soil,
             },
         },
         "alerts": [

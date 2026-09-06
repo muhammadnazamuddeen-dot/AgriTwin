@@ -3,7 +3,7 @@
 import datetime
 import pytest
 from unittest.mock import patch
-import warabandi_engine
+from app.core.engine import warabandi_engine
 from app.models import Farm, Crop
 
 

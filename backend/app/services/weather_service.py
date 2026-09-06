@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.models import WeatherRecord
 
 
 class SimpleTTLCache:
@@ -67,6 +68,9 @@ class WeatherService:
                 "shortwave_radiation",
                 "soil_moisture_0_to_7cm",
                 "soil_temperature_0_to_7cm",
+                "soil_moisture_7_to_28cm",
+                "soil_moisture_28_to_100cm",
+                "soil_temperature_7_to_28cm",
             ]),
             "daily": ",".join([
                 "temperature_2m_max",
@@ -112,6 +116,9 @@ class WeatherService:
                     "cloud_cover": 20,
                     "soil_moisture_0_to_7cm": 0.23,
                     "soil_temperature_0_to_7cm": 26.5,
+                    "soil_moisture_7_to_28cm": 0.21,
+                    "soil_moisture_28_to_100cm": 0.19,
+                    "soil_temperature_7_to_28cm": 25.0,
                 },
             }
             return fallback_data
@@ -134,6 +141,9 @@ class WeatherService:
                 "cloud_cover",
                 "soil_moisture_0_to_7cm",
                 "soil_temperature_0_to_7cm",
+                "soil_moisture_7_to_28cm",
+                "soil_moisture_28_to_100cm",
+                "soil_temperature_7_to_28cm",
             ]),
             "timezone": "Asia/Karachi",
         }
@@ -158,6 +168,9 @@ class WeatherService:
                     "cloud_cover": 20,
                     "soil_moisture_0_to_7cm": 0.24,
                     "soil_temperature_0_to_7cm": 26.0,
+                    "soil_moisture_7_to_28cm": 0.22,
+                    "soil_moisture_28_to_100cm": 0.20,
+                    "soil_temperature_7_to_28cm": 24.5,
                 }
             }
 
@@ -255,6 +268,7 @@ class WeatherService:
 
         hist_mean_temp = 28.2
         hist_mean_hum = 54.0
+        hist_total_precip = 18.4  # fallback
 
         try:
             data = await self.get_historical_nasa_power(lat, lon, start, end)
@@ -270,11 +284,18 @@ class WeatherService:
                     vals = [float(v) for v in rh.values() if float(v) != -999.0]
                     if vals:
                         hist_mean_hum = round(sum(vals) / len(vals), 1)
+                precip = params.get("PRECTOTCORR", {})
+                if isinstance(precip, dict) and precip:
+                    vals = [float(v) for v in precip.values() if float(v) != -999.0]
+                    if vals:
+                        hist_total_precip = round(sum(vals), 1)
         except Exception:
             pass
 
         cur_temp = current_temp if current_temp is not None else 29.5
         cur_hum = current_humidity if current_humidity is not None else 58.0
+
+        n_days = max(1, (end_dt - datetime.date(ref_year, ref_month, 1)).days)
 
         return {
             "baseline_period": f"{ref_year}-{ref_month:02d}",
@@ -283,9 +304,39 @@ class WeatherService:
             "temp_anomaly_c": round(cur_temp - hist_mean_temp, 1),
             "historical_mean_humidity_pct": hist_mean_hum,
             "humidity_anomaly_pct": round(cur_hum - hist_mean_hum, 1),
-            "historical_total_precip_mm": 18.4,
-            "historical_mean_daily_precip_mm": 0.6,
+            "historical_total_precip_mm": hist_total_precip,
+            "historical_mean_daily_precip_mm": round(hist_total_precip / n_days, 2),
         }
+
+
+# ── Shared persistence utility ─────────────────────────────────────────────────────
+def persist_current_weather(farm, current: dict, db) -> bool:
+    """Persist current weather observation with time-based dedup.
+    Returns True if a new record was inserted, False if skipped (too recent).
+    """
+    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=30)
+    recent = (
+        db.query(WeatherRecord)
+        .filter(WeatherRecord.farm_id == farm.id, WeatherRecord.timestamp >= cutoff)
+        .first()
+    )
+    if recent:
+        return False
+
+    record = WeatherRecord(
+        farm_id=farm.id,
+        timestamp=datetime.datetime.now(datetime.UTC),
+        temperature_c=current.get("temperature_2m"),
+        humidity_pct=current.get("relative_humidity_2m"),
+        rainfall_mm=current.get("precipitation"),
+        wind_speed_kmh=current.get("wind_speed_10m"),
+        cloud_cover_pct=current.get("cloud_cover"),
+        et0_mm=None,  # ET0 not in current-conditions endpoint; forecast has it
+        source="open-meteo",
+    )
+    db.add(record)
+    db.commit()
+    return True
 
 
 weather_service = WeatherService()

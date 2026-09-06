@@ -41,7 +41,11 @@ CREATE TABLE IF NOT EXISTS crops (
     sowing_date           TIMESTAMPTZ,
     expected_harvest_date TIMESTAMPTZ,
     growth_stage          VARCHAR(50),
-    season                VARCHAR(20)  -- Rabi / Kharif
+    season                VARCHAR(20),  -- Rabi / Kharif
+    irrigation            VARCHAR(50),
+    soil_type             VARCHAR(50),
+    farming_method        VARCHAR(50),
+    previous_crop         VARCHAR(100)
 );
 CREATE INDEX IF NOT EXISTS idx_crops_farm ON crops(farm_id);
 
@@ -60,6 +64,20 @@ CREATE TABLE IF NOT EXISTS weather_records (
 );
 CREATE INDEX IF NOT EXISTS idx_weather_farm_ts ON weather_records(farm_id, "timestamp" DESC);
 
+-- ── Climate Snapshots ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS climate_snapshots (
+    id                          SERIAL PRIMARY KEY,
+    farm_id                     INTEGER REFERENCES farms(id) ON DELETE CASCADE,
+    baseline_period             VARCHAR(20) NOT NULL,
+    historical_mean_temp_c      DOUBLE PRECISION,
+    temp_anomaly_c              DOUBLE PRECISION,
+    historical_mean_humidity_pct DOUBLE PRECISION,
+    humidity_anomaly_pct        DOUBLE PRECISION,
+    historical_total_precip_mm  DOUBLE PRECISION,
+    created_at                  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_climate_snap_farm ON climate_snapshots(farm_id, created_at DESC);
+
 -- ── Satellite Observations ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS satellite_observations (
     id              SERIAL PRIMARY KEY,
@@ -73,15 +91,31 @@ CREATE TABLE IF NOT EXISTS satellite_observations (
 );
 CREATE INDEX IF NOT EXISTS idx_sat_farm_date ON satellite_observations(farm_id, date DESC);
 
+-- ── Soil Profiles ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS soil_profiles (
+    id                     SERIAL PRIMARY KEY,
+    farm_id                INTEGER UNIQUE REFERENCES farms(id) ON DELETE CASCADE,
+    ph_topsoil             DOUBLE PRECISION,
+    organic_carbon_g_per_kg DOUBLE PRECISION,
+    clay_pct               DOUBLE PRECISION,
+    sand_pct               DOUBLE PRECISION,
+    silt_pct               DOUBLE PRECISION,
+    bulk_density_kg_dm3    DOUBLE PRECISION,
+    source                 VARCHAR(50) DEFAULT 'soilgrids',
+    fetched_at             TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Soil Observations ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS soil_observations (
-    id                    SERIAL PRIMARY KEY,
-    farm_id               INTEGER REFERENCES farms(id) ON DELETE CASCADE,
-    date                  TIMESTAMPTZ NOT NULL,
-    soil_moisture_m3m3    DOUBLE PRECISION,
-    soil_temperature_c    DOUBLE PRECISION,
-    depth_cm              INTEGER,
-    source                VARCHAR(50) DEFAULT 'era5-land'
+    id                     SERIAL PRIMARY KEY,
+    farm_id                INTEGER REFERENCES farms(id) ON DELETE CASCADE,
+    date                   TIMESTAMPTZ NOT NULL,
+    soil_moisture_m3m3     DOUBLE PRECISION,
+    soil_temperature_c     DOUBLE PRECISION,
+    soil_moisture_7_28cm   DOUBLE PRECISION,
+    soil_moisture_28_100cm DOUBLE PRECISION,
+    depth_cm               INTEGER,
+    source                 VARCHAR(50) DEFAULT 'open-meteo'
 );
 CREATE INDEX IF NOT EXISTS idx_soil_farm_date ON soil_observations(farm_id, date DESC);
 

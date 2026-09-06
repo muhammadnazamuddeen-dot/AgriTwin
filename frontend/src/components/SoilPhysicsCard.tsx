@@ -50,7 +50,7 @@ export default function SoilPhysicsCard({ farmId }: SoilPhysicsCardProps) {
   if (!data) return null;
 
   return (
-    <div className="glass-panel p-5 relative overflow-hidden transition-all duration-300 hover:shadow-xl">
+    <div className="glass-panel p-5 relative overflow-hidden transition-all duration-300">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2.5">

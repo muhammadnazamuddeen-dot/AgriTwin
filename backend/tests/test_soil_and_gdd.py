@@ -2,8 +2,7 @@
 
 import datetime
 import pytest
-import soil_engine
-import phenology_gdd
+from app.core.engine import soil_engine, phenology_gdd
 from app.models import Farm, Crop
 
 

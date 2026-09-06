@@ -62,10 +62,14 @@ class Farm(Base):
         "SatelliteObservation", back_populates="farm", cascade="all, delete-orphan"
     )
     soil_observations = relationship("SoilObservation", back_populates="farm", cascade="all, delete-orphan")
+    soil_profile = relationship("SoilProfile", back_populates="farm", uselist=False, cascade="all, delete-orphan")
     recommendations = relationship("Recommendation", back_populates="farm", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="farm", cascade="all, delete-orphan")
     score_snapshots = relationship(
         "HealthScoreSnapshot", back_populates="farm", cascade="all, delete-orphan"
+    )
+    climate_snapshots = relationship(
+        "ClimateSnapshot", back_populates="farm", cascade="all, delete-orphan"
     )
 
 
@@ -80,6 +84,11 @@ class Crop(Base):
     expected_harvest_date = Column(DateTime, nullable=True)
     growth_stage = Column(String(50), nullable=True)
     season = Column(String(20), nullable=True)  # Rabi / Kharif
+    # Crop profile metadata (Phase 3)
+    irrigation = Column(String(50), nullable=True)       # canal / tubewell / drip / sprinkler / rainfed
+    soil_type = Column(String(50), nullable=True)        # loam / clay / sandy / silt / clay-loam
+    farming_method = Column(String(50), nullable=True)   # conventional / organic / precision / zero-tillage
+    previous_crop = Column(String(100), nullable=True)   # free-text crop name
 
     farm = relationship("Farm", back_populates="crops")
 
@@ -101,6 +110,23 @@ class WeatherRecord(Base):
     farm = relationship("Farm", back_populates="weather_records")
 
 
+class ClimateSnapshot(Base):
+    """Persisted climate anomaly snapshot — one per baseline_period per farm."""
+    __tablename__ = "climate_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
+    baseline_period = Column(String(20), nullable=False)  # e.g. "2025-09"
+    historical_mean_temp_c = Column(Float, nullable=True)
+    temp_anomaly_c = Column(Float, nullable=True)
+    historical_mean_humidity_pct = Column(Float, nullable=True)
+    humidity_anomaly_pct = Column(Float, nullable=True)
+    historical_total_precip_mm = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    farm = relationship("Farm", back_populates="climate_snapshots")
+
+
 class SatelliteObservation(Base):
     __tablename__ = "satellite_observations"
 
@@ -116,16 +142,36 @@ class SatelliteObservation(Base):
     farm = relationship("Farm", back_populates="satellite_observations")
 
 
+class SoilProfile(Base):
+    """Static soil properties from SoilGrids — one per farm, rarely changes."""
+    __tablename__ = "soil_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False, unique=True)
+    ph_topsoil = Column(Float, nullable=True)               # 0-30 cm
+    organic_carbon_g_per_kg = Column(Float, nullable=True)  # 0-30 cm
+    clay_pct = Column(Float, nullable=True)                  # 0-30 cm
+    sand_pct = Column(Float, nullable=True)                  # 0-30 cm
+    silt_pct = Column(Float, nullable=True)                  # 0-30 cm
+    bulk_density_kg_dm3 = Column(Float, nullable=True)      # 0-30 cm
+    source = Column(String(50), default="soilgrids")
+    fetched_at = Column(DateTime, default=func.now())
+
+    farm = relationship("Farm", back_populates="soil_profile")
+
+
 class SoilObservation(Base):
     __tablename__ = "soil_observations"
 
     id = Column(Integer, primary_key=True, index=True)
     farm_id = Column(Integer, ForeignKey("farms.id"), nullable=False)
     date = Column(DateTime, nullable=False)
-    soil_moisture_m3m3 = Column(Float, nullable=True)
-    soil_temperature_c = Column(Float, nullable=True)
+    soil_moisture_m3m3 = Column(Float, nullable=True)       # 0-7 cm
+    soil_temperature_c = Column(Float, nullable=True)       # 0-7 cm
+    soil_moisture_7_28cm = Column(Float, nullable=True)
+    soil_moisture_28_100cm = Column(Float, nullable=True)
     depth_cm = Column(Integer, nullable=True)
-    source = Column(String(50), default="era5-land")
+    source = Column(String(50), default="open-meteo")
 
     farm = relationship("Farm", back_populates="soil_observations")
 
@@ -177,3 +223,76 @@ class Alert(Base):
     created_at = Column(DateTime, default=func.now())
 
     farm = relationship("Farm", back_populates="alerts")
+
+
+class CropPrice(Base):
+    """Daily market committee prices from AMIS Punjab & PAR REST API."""
+
+    __tablename__ = "crop_prices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    crop_name = Column(String(100), nullable=False, index=True)
+    variety = Column(String(100), nullable=True)
+    district = Column(String(100), nullable=False, index=True)
+    market = Column(String(100), nullable=False)
+    date = Column(DateTime, nullable=False, index=True)
+    min_price_pkr_100kg = Column(Float, nullable=True)
+    max_price_pkr_100kg = Column(Float, nullable=True)
+    average_price_pkr_100kg = Column(Float, nullable=False)
+    unit = Column(String(30), default="100 kg")
+    source = Column(String(100), default="AMIS Punjab / PAR")
+    created_at = Column(DateTime, default=func.now())
+
+
+class CropMarketPrice(Base):
+    """Real-time & historical wholesale market prices per crop_id across mandis."""
+
+    __tablename__ = "crop_market_prices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    crop_id = Column(String(50), nullable=False, index=True)
+    crop_name = Column(String(100), nullable=False, index=True)
+    variety = Column(String(100), nullable=True)
+    province = Column(String(100), nullable=True, default="Punjab")
+    district = Column(String(100), nullable=False, index=True)
+    market = Column(String(100), nullable=False)
+    date = Column(DateTime, nullable=False, index=True)
+    min_price_pkr_40kg = Column(Float, nullable=True)
+    max_price_pkr_40kg = Column(Float, nullable=True)
+    average_price_pkr_40kg = Column(Float, nullable=False)
+    min_price_pkr_100kg = Column(Float, nullable=True)
+    max_price_pkr_100kg = Column(Float, nullable=True)
+    average_price_pkr_100kg = Column(Float, nullable=True)
+    unit = Column(String(30), default="40 kg")
+    source = Column(String(100), default="AMIS Pakistan / PAR")
+    created_at = Column(DateTime, default=func.now())
+
+
+class CropPricePrediction(Base):
+    """ML commodity price predictions per crop_id for 7d, 14d, and 30d horizons."""
+
+    __tablename__ = "crop_price_predictions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    crop_id = Column(String(50), nullable=False, index=True)
+    crop_name = Column(String(100), nullable=False, index=True)
+    province = Column(String(100), nullable=True, default="Punjab")
+    district = Column(String(100), nullable=False, index=True)
+    market = Column(String(100), nullable=True)
+    prediction_date = Column(DateTime, nullable=False, default=func.now())
+    current_price_pkr_100kg = Column(Float, nullable=False)
+    current_price_pkr_40kg = Column(Float, nullable=True)
+    forecast_7d_pkr_100kg = Column(Float, nullable=False)
+    forecast_14d_pkr_100kg = Column(Float, nullable=False)
+    forecast_30d_pkr_100kg = Column(Float, nullable=False)
+    forecast_7d_pkr_40kg = Column(Float, nullable=True)
+    forecast_14d_pkr_40kg = Column(Float, nullable=True)
+    forecast_30d_pkr_40kg = Column(Float, nullable=True)
+    price_change_7d_pct = Column(Float, nullable=True)
+    price_change_30d_pct = Column(Float, nullable=True)
+    trend_direction = Column(String(20), nullable=True)
+    confidence = Column(Float, nullable=True)
+    confidence_pct = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+

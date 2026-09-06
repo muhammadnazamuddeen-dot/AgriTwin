@@ -8,17 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-# Add backend and data-engine to sys.path
 backend_dir = Path(__file__).resolve().parent.parent
-data_engine_dir = backend_dir.parent / "data-engine"
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
-if str(data_engine_dir) not in sys.path:
-    sys.path.insert(0, str(data_engine_dir))
 
 from app.main import app
 from app.database import Base, get_db
 from app.models import User, Farm, Crop
+from app.routers.auth import get_current_user
 
 # In-memory SQLite engine with StaticPool so tables persist across connections within the test
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -66,7 +63,7 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
-    """FastAPI TestClient with overridden get_db dependency."""
+    """Unauthenticated FastAPI TestClient with overridden get_db dependency."""
     def _override_get_db():
         try:
             yield db_session
@@ -77,3 +74,22 @@ def client(db_session):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def authenticated_client(db_session):
+    """Authenticated FastAPI TestClient with overridden get_db and get_current_user dependencies."""
+    default_user = db_session.query(User).filter_by(id=1).first()
+
+    def _override_get_db():
+        yield db_session
+
+    def _override_get_current_user():
+        return default_user
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_get_current_user
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+

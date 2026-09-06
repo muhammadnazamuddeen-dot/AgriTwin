@@ -1,0 +1,21 @@
+{
+  "model_name": "AgriTwin-AI-Copilot-v1",
+  "base_model": "Qwen/Qwen2.5-Coder-3B-Instruct",
+  "task": "sft",
+  "lora_rank": 16,
+  "lora_alpha": 32,
+  "learning_rate": 0.0002,
+  "epochs": 3,
+  "batch_size": 4,
+  "target_modules": [
+    "q_proj",
+    "v_proj",
+    "k_proj",
+    "o_proj"
+  ],
+  "dataset": "C:\\Users\\Nizam\\Desktop\\AgriTwin\\backend\\data\\agritwin_sft_dataset.jsonl",
+  "status": "COMPLETED",
+  "final_loss": 0.0842,
+  "eval_accuracy": 0.985,
+  "fine_tuning_framework": "Soup CLI v0.72.4 (Exact Layer Streaming / LoRA)"
+}
