@@ -15,8 +15,10 @@ from app.models import (
     SatelliteObservation,
     SoilObservation,
     SoilProfile,
+    User,
     WeatherRecord,
 )
+from app.routers.auth import get_current_user
 from app.schemas import (
     AIRecommendationRequest,
     AIRecommendationResponse,
@@ -49,9 +51,10 @@ from app.core.engine import (
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-def _get_farm_or_404(db: Session, farm_id: int) -> Farm:
+def _get_farm_or_404(db: Session, farm_id: int, user_id: int) -> Farm:
+    """Return the farm if it exists and belongs to *user_id*."""
     farm = db.get(Farm, farm_id)
-    if not farm:
+    if not farm or farm.user_id != user_id:
         raise HTTPException(status_code=404, detail="Farm not found")
     if farm.latitude is None or farm.longitude is None:
         raise HTTPException(status_code=400, detail="Farm has no coordinates set")
@@ -87,9 +90,13 @@ def _build_farm_context(farm: Farm, weather_data: dict, db: Session) -> agricore
 
 # ── Health Score ──────────────────────────────────────────────────────────────
 @router.get("/health/{farm_id}")
-async def get_health_score(farm_id: int, db: Session = Depends(get_db)):
+async def get_health_score(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Compute a live health score for a farm using AgriCore."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Fetch live weather to build context
     weather_data = await weather_service.get_current_weather_open_meteo(
@@ -121,9 +128,13 @@ async def get_health_score(farm_id: int, db: Session = Depends(get_db)):
 
 # ── AI Recommendation ─────────────────────────────────────────────────────────
 @router.post("/recommendation/{farm_id}")
-async def get_recommendation(farm_id: int, db: Session = Depends(get_db)):
+async def get_recommendation(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Generate an AI recommendation for a farm using AgriCore + Gemini."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     weather_data = await weather_service.get_current_weather_open_meteo(
         farm.latitude, farm.longitude
@@ -159,8 +170,14 @@ async def get_recommendation(farm_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/recommendations/history/{farm_id}", response_model=list[RecommendationResponse])
-def get_recommendation_history(farm_id: int, limit: int = 10, db: Session = Depends(get_db)):
+def get_recommendation_history(
+    farm_id: int,
+    limit: int = 10,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Get past recommendations for a farm."""
+    _get_farm_or_404(db, farm_id, user.id)
     return (
         db.query(Recommendation)
         .filter(Recommendation.farm_id == farm_id)
@@ -172,9 +189,14 @@ def get_recommendation_history(farm_id: int, limit: int = 10, db: Session = Depe
 
 # ── 7-Day Forecast (chart-friendly) ──────────────────────────────────────────
 @router.get("/forecast-chart/{farm_id}")
-async def get_forecast_chart(farm_id: int, days: int = 7, db: Session = Depends(get_db)):
+async def get_forecast_chart(
+    farm_id: int,
+    days: int = 7,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Return daily forecast data formatted for charting."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     data = await weather_service.get_forecast_open_meteo(
         farm.latitude, farm.longitude, forecast_days=days
     )
@@ -217,12 +239,14 @@ def get_crop_knowledge():
 
 # ── Farm History (digital twin timeline) ────────────────────────────────────
 @router.get("/history/{farm_id}")
-def get_farm_history(farm_id: int, db: Session = Depends(get_db)):
+def get_farm_history(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Historical record for a farm: score snapshots, weather observations,
     NDVI series, alerts and recommendations (most recent first for lists)."""
-    farm = db.get(Farm, farm_id)
-    if not farm:
-        raise HTTPException(status_code=404, detail="Farm not found")
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Score snapshots — chronological, most recent 200
     scores = (
@@ -338,9 +362,13 @@ def _safe_index(lst: list | None, idx: int):
 
 # ── Warabandi (Canal Water Turn) & Energy Cost Optimizer ──────────────────────
 @router.get("/warabandi/{farm_id}", response_model=WarabandiAdviceResponse)
-async def get_warabandi_advice(farm_id: int, db: Session = Depends(get_db)):
+async def get_warabandi_advice(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Evaluate Warabandi canal turn schedule and groundwater energy cost optimization."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Active crop
     latest_crop = (
@@ -411,10 +439,13 @@ async def get_warabandi_advice(farm_id: int, db: Session = Depends(get_db)):
 
 @router.put("/warabandi/{farm_id}/config", response_model=WarabandiAdviceResponse)
 async def update_warabandi_config(
-    farm_id: int, payload: WarabandiConfigUpdate, db: Session = Depends(get_db)
+    farm_id: int,
+    payload: WarabandiConfigUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Update farm Warabandi schedule and tubewell fuel preferences."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     if payload.canal_name is not None:
         farm.canal_name = payload.canal_name
@@ -433,13 +464,17 @@ async def update_warabandi_config(
     db.commit()
     db.refresh(farm)
 
-    return await get_warabandi_advice(farm_id, db)
+    return await get_warabandi_advice(farm_id, user, db)
 
 
 @router.get("/soil-physics/{farm_id}", response_model=SoilPhysicsResponse)
-async def get_farm_soil_physics(farm_id: int, db: Session = Depends(get_db)):
+async def get_farm_soil_physics(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Fetch 250m resolution ISRIC SoilGrids texture & Saxton-Rawls hydraulic properties."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     props = await soil_engine.evaluate_soil_physics(farm.latitude, farm.longitude)
     return SoilPhysicsResponse(
         farm_id=farm.id,
@@ -460,9 +495,13 @@ async def get_farm_soil_physics(farm_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/phenology-gdd/{farm_id}", response_model=CropPhenologyGDDResponse)
-async def get_farm_phenology_gdd(farm_id: int, db: Session = Depends(get_db)):
+async def get_farm_phenology_gdd(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Calculate Growing Degree Days (GDD) thermal accumulation and phenological progress."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     latest_crop = (
         db.query(Crop)
         .filter(Crop.farm_id == farm.id)
@@ -517,6 +556,7 @@ async def get_crop_suitability(
     farm_id: int,
     crop: str | None = None,
     month: int | None = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -524,7 +564,7 @@ async def get_crop_suitability(
     If optional `crop` query param is supplied, evaluates only that crop.
     Otherwise, evaluates and ranks all crops in the knowledge base.
     """
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Soil profile
     soil_prof = db.query(SoilProfile).filter(SoilProfile.farm_id == farm.id).first()
@@ -599,13 +639,14 @@ async def get_crop_suitability(
 async def get_pest_disease_risk(
     farm_id: int,
     crop: str | None = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Evaluate real-time microclimate pest & pathogen risks for a farm.
     Uses live weather data, latest satellite NDVI, crop growth stage, and Punjab agronomic rules.
     """
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Latest crop & growth stage
     latest_crop = (
@@ -666,6 +707,7 @@ async def get_pest_disease_risk(
 @router.post("/ask-ai", response_model=AIRecommendationResponse)
 async def ask_ai_advisor(
     payload: AIRecommendationRequest,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -673,7 +715,7 @@ async def ask_ai_advisor(
     Accepts farmer's custom question, builds full 360-degree farm context, and generates
     tailored precision advice with confidence scoring and risk categorization.
     """
-    farm = _get_farm_or_404(db, payload.farm_id)
+    farm = _get_farm_or_404(db, payload.farm_id, user.id)
 
     # Gather live telemetry
     weather_data = {}

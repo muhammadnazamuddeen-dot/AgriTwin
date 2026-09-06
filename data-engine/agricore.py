@@ -147,7 +147,7 @@ def compute_health_score(ctx: FarmContext) -> FarmHealthScore:
 
     # ── Pest Risk (temp + humidity interaction) ───────────────────────────────
     pest_score = 80
-    if ctx.temperature_c and ctx.humidity_pct:
+    if ctx.temperature_c is not None and ctx.humidity_pct is not None:
         # Warm + humid = pest-friendly (e.g., whitefly, aphids, bollworm in Punjab)
         if 26 <= ctx.temperature_c <= 35 and ctx.humidity_pct > 65:
             pest_score -= 35

@@ -26,8 +26,10 @@ from app.models import (
     Recommendation as RecModel,
     SoilObservation,
     SoilProfile,
+    User,
     WeatherRecord,
 )
+from app.routers.auth import get_current_user
 from app.services.ml_engine import load_or_train, predict_forecast
 from app.services.ndvi_cache import get_ndvi_series_cached
 from app.services.soil_service import soil_service
@@ -41,9 +43,10 @@ router = APIRouter(prefix="/farms", tags=["intelligence"])
 MODIS_SOURCE = "MODIS Terra (MOD13Q1, 250m)"
 
 
-def _get_farm_or_404(db: Session, farm_id: int) -> Farm:
+def _get_farm_or_404(db: Session, farm_id: int, user_id: int) -> Farm:
+    """Return the farm if it exists and belongs to *user_id*."""
     farm = db.get(Farm, farm_id)
-    if not farm:
+    if not farm or farm.user_id != user_id:
         raise HTTPException(status_code=404, detail="Farm not found")
     if farm.latitude is None or farm.longitude is None:
         raise HTTPException(status_code=400, detail="Farm has no coordinates set")
@@ -197,7 +200,20 @@ async def _ensure_soil_profile(farm: Farm, db: Session) -> SoilProfile | None:
 
 
 def _persist_recommendation(farm_id: int, rec, db: Session):
-    """Save the generated recommendation to the database."""
+    """Save the generated recommendation, skipping identical repeats within 6 hours.
+
+    The intelligence endpoint runs on every page view; without dedup the
+    recommendation history would grow one row per page load.
+    """
+    since = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(hours=6)
+    recent = (
+        db.query(RecModel)
+        .filter(RecModel.farm_id == farm_id, RecModel.created_at >= since)
+        .order_by(RecModel.created_at.desc())
+        .first()
+    )
+    if recent and recent.recommendation_text == rec.text:
+        return
     db.add(RecModel(
         farm_id=farm_id,
         recommendation_text=rec.text,
@@ -382,7 +398,11 @@ def _public_ml_meta(meta: dict | None) -> dict | None:
 
 # ── Intelligence Endpoint ────────────────────────────────────────────────────
 @router.get("/{farm_id}/intelligence")
-async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
+async def get_farm_intelligence(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Unified intelligence endpoint — returns everything for one farm.
 
@@ -392,7 +412,7 @@ async def get_farm_intelligence(farm_id: int, db: Session = Depends(get_db)):
       score, alerts, recommendations, provenance
     }
     """
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     # Fetch live data in parallel: weather (current + forecast) and MODIS NDVI (cached)
     current_data, forecast_data, ndvi_series = await asyncio.gather(

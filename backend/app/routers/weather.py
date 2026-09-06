@@ -6,16 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
-from app.models import ClimateSnapshot, Farm, WeatherRecord
+from app.models import ClimateSnapshot, Farm, User, WeatherRecord
+from app.routers.auth import get_current_user
 from app.schemas import ClimateSnapshotResponse, WeatherRecordResponse
 from app.services.weather_service import persist_current_weather, weather_service
 
 router = APIRouter(prefix="/weather", tags=["weather"])
 
 
-def _get_farm_or_404(db, farm_id: int) -> Farm:
+def _get_farm_or_404(db, farm_id: int, user_id: int) -> Farm:
+    """Return the farm if it exists and belongs to *user_id*."""
     farm = db.query(Farm).get(farm_id)
-    if not farm:
+    if not farm or farm.user_id != user_id:
         raise HTTPException(status_code=404, detail="Farm not found")
     if farm.latitude is None or farm.longitude is None:
         raise HTTPException(status_code=400, detail="Farm has no coordinates set")
@@ -44,9 +46,14 @@ async def get_weather(
 
 
 @router.get("/forecast/{farm_id}")
-async def get_weather_forecast(farm_id: int, days: int = 7, db: Session = Depends(get_db)):
+async def get_weather_forecast(
+    farm_id: int,
+    days: int = 7,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Fetch live weather forecast for a farm from Open-Meteo."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     data = await weather_service.get_forecast_open_meteo(farm.latitude, farm.longitude, forecast_days=days)
     # Auto-persist current conditions embedded in forecast response
     current_data = data.get("current", {})
@@ -56,9 +63,13 @@ async def get_weather_forecast(farm_id: int, days: int = 7, db: Session = Depend
 
 
 @router.get("/current/{farm_id}")
-async def get_current_weather(farm_id: int, db: Session = Depends(get_db)):
+async def get_current_weather(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Fetch current weather conditions for a farm."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     data = await weather_service.get_current_weather_open_meteo(farm.latitude, farm.longitude)
     # Auto-persist current observation
     current_data = data.get("current", {})
@@ -72,10 +83,11 @@ async def get_historical_weather(
     farm_id: int,
     start: str = Query(..., description="Start date YYYYMMDD"),
     end: str = Query(..., description="End date YYYYMMDD"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Fetch historical climate data from NASA POWER."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     data = await weather_service.get_historical_nasa_power(
         farm.latitude, farm.longitude, start, end
     )
@@ -87,9 +99,11 @@ def get_stored_weather(
     farm_id: int,
     days_back: int = Query(default=7, ge=1, le=365),
     limit: int = Query(default=100, ge=1, le=1000),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get stored weather records for a farm, with optional time-range filter."""
+    _get_farm_or_404(db, farm_id, user.id)
     since = datetime.datetime.utcnow() - datetime.timedelta(days=days_back)
     return (
         db.query(WeatherRecord)
@@ -148,9 +162,13 @@ async def _compute_monthly_summaries(lat: float, lon: float) -> list[dict]:
 
 
 @router.get("/climate/{farm_id}")
-async def get_climate_summary(farm_id: int, db: Session = Depends(get_db)):
+async def get_climate_summary(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Return current anomaly, 12-month monthly summaries, and anomaly history."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     # Current conditions for anomaly computation
     current = await weather_service.get_current_weather_open_meteo(farm.latitude, farm.longitude)
     cur = current.get("current", {})

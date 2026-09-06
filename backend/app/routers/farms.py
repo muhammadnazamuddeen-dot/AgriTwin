@@ -198,7 +198,7 @@ def update_crop(
         new_sowing = data.get("sowing_date", crop.sowing_date)
         if "crop_name" in data or "sowing_date" in data:
             if new_sowing:
-                stage_info = derive_growth_stage(new_name, new_sowing)
+                stage_info = crop_knowledge.derive_growth_stage(new_name, new_sowing)
                 data["growth_stage"] = stage_info["stage"]
 
     for field, value in data.items():
