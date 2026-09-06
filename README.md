@@ -53,7 +53,8 @@
 
 ### 6. Security & Session Architecture
 - **Mandatory Login-on-Start**: Unauthenticated visitors are automatically routed to the login page; the public About page remains open for exploration.
-- **No Sensitive Tokens in Browser Storage**: Eliminates XSS token theft risks by avoiding localStorage for JWT tokens and user records; sessions are managed through secure cookies (`SameSite=Lax`, `Path=/`) and an in-memory application context.
+- **No Sensitive Tokens in Browser Storage**: JWT tokens and user records are never stored in `localStorage`/`sessionStorage`. Sessions rely on the HttpOnly `agri_session` cookie as the primary mechanism; a JS-readable `agri_token` cookie is kept only so cross-origin local development (`localhost` → `127.0.0.1`) can attach the Bearer header. Login rate-limiting, bcrypt hashing, and enterprise security headers mitigate XSS/CSRF exposure.
+- **Farm-Scoped Endpoint Protection**: All per-farm data endpoints (`/farms/{id}/intelligence`, `/analytics/*`, `/weather/*`, `/satellite/*`, `/soil/{id}`, `/opportunities/{id}`, `/market/suitability/{id}`, `/ai/explain`) require an authenticated session and enforce farm ownership — unauthenticated requests receive `401` and cross-user farm access returns `404`.
 - **Backend HttpOnly Cookies**: Supports dual authentication via `HttpOnly` session cookies (`agri_session`) or Bearer tokens.
 - **Role-Based Access Control**: Ensures farm resources are strictly bound to authenticated user accounts and restricts administrative/audit operations by role.
 
@@ -76,7 +77,7 @@ AgriTwin/
 │   │   ├── models.py         # Database models (User, Farm, Crop, etc.)
 │   │   ├── schemas/          # Pydantic validation schemas
 │   │   └── routers/          # Route handlers (auth, farms, analytics, intelligence, weather)
-│   ├── tests/                # Automated pytest suite (20 tests)
+│   ├── tests/                # Automated pytest suite (84 tests)
 │   └── requirements.txt      # Python dependencies
 ├── data-engine/              # Scientific & Agronomic Modeling Engines
 │   ├── agricore.py           # 5-dimension health scoring & agronomy rules
@@ -150,8 +151,8 @@ Open your browser at: **[http://localhost:3000](http://localhost:3000)**.
 AgriTwin includes automated test suites covering backend agronomic formulas and frontend localization parity:
 
 ```bash
-# 1. Run Backend Pytest Suite (20 tests)
-# Validates health checks, cookie auth, farm CRUD, Warabandi, soil physics, and phenology
+# 1. Run Backend Pytest Suite (84 tests)
+# Validates health checks, cookie auth, farm CRUD + ownership gates, Warabandi, soil physics, and phenology
 cd backend
 PYTHONPATH=../data-engine:app:backend pytest tests/ -v
 

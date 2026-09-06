@@ -48,7 +48,7 @@ def test_warabandi_rain_hold_and_diesel_savings():
     assert "ڈیزل" in result["reasoning_ur"] or "روپے" in result["reasoning_ur"]
 
 
-def test_warabandi_endpoint_flow(client, db_session):
+def test_warabandi_endpoint_flow(authenticated_client, db_session):
     """Test Warabandi advice retrieval and schedule update endpoints."""
     farm = Farm(
         id=202,
@@ -89,7 +89,7 @@ def test_warabandi_endpoint_flow(client, db_session):
         }
 
         # 1. Fetch Warabandi advice
-        res = client.get(f"/api/v1/analytics/warabandi/{farm.id}")
+        res = authenticated_client.get(f"/api/v1/analytics/warabandi/{farm.id}")
         assert res.status_code == 200
         data = res.json()
         assert data["farm_id"] == farm.id
@@ -104,7 +104,7 @@ def test_warabandi_endpoint_flow(client, db_session):
             "tubewell_power_source": "solar",
             "tubewell_hourly_cost_pkr": 0.0,
         }
-        put_res = client.put(f"/api/v1/analytics/warabandi/{farm.id}/config", json=update_payload)
+        put_res = authenticated_client.put(f"/api/v1/analytics/warabandi/{farm.id}/config", json=update_payload)
         assert put_res.status_code == 200
         updated = put_res.json()
         assert updated["canal_turn_day"] == "Tuesday"

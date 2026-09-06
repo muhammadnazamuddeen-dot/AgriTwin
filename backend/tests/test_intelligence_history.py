@@ -33,7 +33,7 @@ def seeded_farm(db_session):
     return farm
 
 
-def test_forecast_chart_endpoint(client, seeded_farm):
+def test_forecast_chart_endpoint(authenticated_client, seeded_farm):
     """Test 7-day forecast chart data endpoint."""
     with patch("app.services.weather_service.weather_service.get_forecast_open_meteo") as mock_forecast:
         mock_forecast.return_value = {
@@ -45,7 +45,7 @@ def test_forecast_chart_endpoint(client, seeded_farm):
                 "et0_fao_evapotranspiration": [3.5, 4.0, 4.2],
             }
         }
-        res = client.get(f"/api/v1/analytics/forecast-chart/{seeded_farm.id}?days=3")
+        res = authenticated_client.get(f"/api/v1/analytics/forecast-chart/{seeded_farm.id}?days=3")
         assert res.status_code == 200
         data = res.json()
         assert data["farm_id"] == seeded_farm.id
@@ -53,7 +53,7 @@ def test_forecast_chart_endpoint(client, seeded_farm):
         assert data["forecast"][0]["temp_max"] == 26.0
 
 
-def test_farm_history_ledger_endpoint(client, seeded_farm, db_session):
+def test_farm_history_ledger_endpoint(authenticated_client, seeded_farm, db_session):
     """Test retrieving chronological farm telemetry ledger."""
     weather = WeatherRecord(
         farm_id=seeded_farm.id,
@@ -67,7 +67,7 @@ def test_farm_history_ledger_endpoint(client, seeded_farm, db_session):
     db_session.add(weather)
     db_session.commit()
 
-    res = client.get(f"/api/v1/analytics/history/{seeded_farm.id}")
+    res = authenticated_client.get(f"/api/v1/analytics/history/{seeded_farm.id}")
     assert res.status_code == 200
     ledger = res.json()
     assert ledger["farm"]["name"] == seeded_farm.name

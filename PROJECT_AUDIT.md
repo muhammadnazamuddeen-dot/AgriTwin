@@ -11,7 +11,7 @@
 
 AgriTwin AI has undergone a full system audit and verification. The platform is a **real working MVP** integrating live agrometeorological feeds, pedotransfer soil physics engines, market price prediction algorithms, canal rotational rights (Warabandi) scheduling, and bilingual AI explanations (English, Urdu, Punjabi/Shahmukhi).
 
-All **79 automated backend unit and integration tests** pass cleanly with 100% test coverage across core engines, API routes, and data persistence layers.
+All **84 automated backend unit and integration tests** pass cleanly with 100% test coverage across core engines, API routes, and data persistence layers.
 
 ---
 

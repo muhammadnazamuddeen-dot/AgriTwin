@@ -97,21 +97,51 @@ def test_endpoint_opportunities(client):
     assert len(data["opportunities"]) >= 10
 
 
-def test_endpoint_assistant_and_ai_explain(client, authenticated_client):
-    """Verify POST /api/v1/assistant and /api/v1/ai/explain return explanations."""
+def test_endpoint_assistant_and_ai_explain(authenticated_client):
+    """Verify POST /api/v1/assistant and /api/v1/ai/explain return explanations (auth required)."""
     farm_res = authenticated_client.post(
         "/api/v1/farms/",
         json={"name": "Assistant Test Farm", "district": "Okara", "latitude": 30.81, "longitude": 73.45},
     )
     farm_id = farm_res.json()["id"]
 
-    res1 = client.post("/api/v1/ai/explain", json={"farm_id": farm_id, "language": "en"})
+    res1 = authenticated_client.post("/api/v1/ai/explain", json={"farm_id": farm_id, "language": "en"})
     assert res1.status_code == 200
     assert "explanation" in res1.json()
 
-    res2 = client.post("/api/v1/assistant", json={"farm_id": farm_id, "language": "ur"})
+    res2 = authenticated_client.post("/api/v1/assistant", json={"farm_id": farm_id, "language": "ur"})
     assert res2.status_code == 200
     assert "explanation" in res2.json()
+
+
+def test_farm_scoped_endpoints_require_auth(client, db_session):
+    """Verify farm-scoped intelligence/analytics endpoints reject unauthenticated access."""
+    from app.models import Farm
+    farm = Farm(
+        id=999,
+        user_id=1,
+        name="Auth Gate Farm",
+        district="Okara",
+        province="Punjab",
+        latitude=30.81,
+        longitude=73.45,
+    )
+    db_session.add(farm)
+    db_session.commit()
+
+    # Unauthenticated requests must be rejected
+    assert client.get(f"/api/v1/farms/{farm.id}/intelligence").status_code == 401
+    assert client.get(f"/api/v1/analytics/history/{farm.id}").status_code == 401
+    assert client.get(f"/api/v1/analytics/soil-physics/{farm.id}").status_code == 401
+    assert client.get(f"/api/v1/weather/current/{farm.id}").status_code == 401
+    assert client.get(f"/api/v1/satellite/ndvi-series/{farm.id}").status_code == 401
+    assert client.get(f"/api/v1/opportunities/{farm.id}").status_code == 401
+    assert client.get(f"/api/v1/market/suitability/{farm.id}").status_code == 401
+
+    # Public reference endpoints must remain open
+    assert client.get("/api/v1/weather?latitude=30.81&longitude=73.45").status_code == 200
+    assert client.get("/api/v1/soil?latitude=30.81&longitude=73.45").status_code == 200
+    assert client.get("/api/v1/crops").status_code == 200
 
 
 def test_health_and_ready_endpoints(client):

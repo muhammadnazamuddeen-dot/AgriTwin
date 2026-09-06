@@ -77,7 +77,7 @@ def test_phenology_thermal_stage_tracking():
     assert report.stage_progress_pct >= 0.0
 
 
-def test_analytics_soil_and_gdd_endpoints(client, db_session):
+def test_analytics_soil_and_gdd_endpoints(authenticated_client, db_session):
     """Test /analytics/soil-physics/{id} and /analytics/phenology-gdd/{id} endpoints."""
     farm = Farm(
         id=301,
@@ -102,7 +102,7 @@ def test_analytics_soil_and_gdd_endpoints(client, db_session):
     db_session.commit()
 
     # 1. Soil Physics endpoint
-    res_soil = client.get(f"/api/v1/analytics/soil-physics/{farm.id}")
+    res_soil = authenticated_client.get(f"/api/v1/analytics/soil-physics/{farm.id}")
     assert res_soil.status_code == 200
     soil_data = res_soil.json()
     assert soil_data["farm_id"] == farm.id
@@ -110,7 +110,7 @@ def test_analytics_soil_and_gdd_endpoints(client, db_session):
     assert "punjabi_texture" in soil_data
 
     # 2. Phenology GDD endpoint
-    res_gdd = client.get(f"/api/v1/analytics/phenology-gdd/{farm.id}")
+    res_gdd = authenticated_client.get(f"/api/v1/analytics/phenology-gdd/{farm.id}")
     assert res_gdd.status_code == 200
     gdd_data = res_gdd.json()
     assert gdd_data["farm_id"] == farm.id
