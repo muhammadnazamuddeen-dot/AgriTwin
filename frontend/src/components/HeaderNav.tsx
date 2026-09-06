@@ -4,55 +4,54 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/Icon";
+import { usePwaInstall } from "@/components/ServiceWorkerRegistration";
+
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
 import { useLanguage } from "@/components/LanguageProvider";
-import { api } from "@/lib/api";
-import { useAuth } from "@/components/AuthProvider";
-import { usePwaInstall } from "@/components/ServiceWorkerRegistration";
+import { api, type AuthUser } from "@/lib/api";
 
 export default function HeaderNav() {
   const pathname = usePathname();
   const { t, isUrdu } = useLanguage();
-  const { user, logout } = useAuth();
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { canInstall, installApp } = usePwaInstall();
 
-  const docsUrl = process.env.NEXT_PUBLIC_API_URL
-    ? process.env.NEXT_PUBLIC_API_URL.replace("/api/v1", "/docs")
-    : "http://127.0.0.1:8000/docs";
 
   useEffect(() => {
-    let active = true;
+    // Check API health
+    api
+      .healthCheck()
+      .then((h) => setApiOnline(h.status === "ok"))
+      .catch(() => setApiOnline(false));
 
-    const checkHealth = () => {
-      api
-        .healthCheck()
-        .then((h) => {
-          if (active) setApiOnline(h.status === "ok");
-        })
-        .catch(() => {
-          if (active) setApiOnline(false);
-        });
-    };
-
-    checkHealth();
-    const interval = setInterval(checkHealth, 10000);
-
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
+    // Load auth user
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("agri_user");
+      if (stored) {
+        try {
+          setUser(JSON.parse(stored));
+        } catch {
+          // ignore
+        }
+      }
+    }
   }, []);
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("agri_token");
+      localStorage.removeItem("agri_user");
+      setUser(null);
+      window.location.href = "/";
+    }
   };
 
   const navLinks = [
     { href: "/", label: t("navDashboard", "Dashboard"), icon: "activity" as const },
-    { href: "/farms", label: t("navFarmsHub", "Farms"), icon: "wheat" as const },
+    { href: "/farms", label: t("navFarmsHub", "Farms Hub"), icon: "wheat" as const },
     { href: "/about", label: t("navAbout", "About"), icon: "info" as const },
   ];
 
@@ -91,6 +90,18 @@ export default function HeaderNav() {
                 </Link>
               );
             })}
+
+            {/* FastAPI Docs External Link */}
+            <a
+              href="http://127.0.0.1:8000/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-mist transition-colors hover:bg-ink/6 hover:text-ink"
+              title="Open Swagger REST API Docs (Backend :8000)"
+            >
+              <span>{t("navDocs", "API Docs")}</span>
+              <Icon name="externalLink" size={11} className="text-dim" />
+            </a>
           </nav>
         </div>
 
@@ -124,6 +135,7 @@ export default function HeaderNav() {
           {/* Theme Toggle (Always visible) */}
           <ThemeToggle />
 
+
           {/* Install App (Desktop) */}
           {canInstall && (
             <button
@@ -154,6 +166,7 @@ export default function HeaderNav() {
               >
                 {user.role === "extension_officer" ? "Officer" : "Farmer"}
               </span>
+
               <button
                 onClick={handleLogout}
                 title="Sign out"
@@ -184,7 +197,7 @@ export default function HeaderNav() {
 
       {/* Mobile dropdown drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden w-full border-t border-edge bg-panel px-4 py-4 shadow-lg space-y-4 animate-slide-down">
+        <div className="md:hidden border-t border-ink/8 bg-panel/95 backdrop-blur-2xl px-4 py-4 shadow-2xl space-y-4 animate-slide-down">
           {/* User Profile or Sign In Button on Mobile */}
           {user ? (
             <div className="flex items-center justify-between rounded-xl border border-edge bg-abyss p-3">
@@ -192,6 +205,7 @@ export default function HeaderNav() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10 text-sm font-semibold text-brand">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
+
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
@@ -206,6 +220,7 @@ export default function HeaderNav() {
                     </span>
                   </div>
                   <p className="truncate text-xs text-mist">{user.email || "Punjab Farmer"}</p>
+
                 </div>
               </div>
               <button
@@ -229,6 +244,7 @@ export default function HeaderNav() {
               <span>{t("signIn", "Sign In")}</span>
             </Link>
           )}
+
 
           {/* PWA Install Button inside Mobile Menu */}
           {canInstall && (
@@ -258,6 +274,7 @@ export default function HeaderNav() {
             </button>
           )}
 
+
           {/* Navigation Links */}
           <nav className="flex flex-col gap-1">
             {navLinks.map((link) => {
@@ -270,11 +287,12 @@ export default function HeaderNav() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-ink/[0.06] text-ink"
-                      : "text-mist hover:bg-ink/[0.04] hover:text-ink"
-                  }`}
+
+                  className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all ${isActive
+                      ? "border border-brand/30 bg-brand/12 text-brand"
+                      : "text-mist hover:bg-ink/5 hover:text-ink"
+                    }`}
+
                 >
                   <Icon
                     name={link.icon}
@@ -288,7 +306,7 @@ export default function HeaderNav() {
 
             {/* API Docs External Link (Mobile) */}
             <a
-              href={docsUrl}
+              href="http://127.0.0.1:8000/docs"
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
@@ -299,20 +317,23 @@ export default function HeaderNav() {
             </a>
           </nav>
 
-          {/* Mobile Footer: Language Selector + Status */}
-          <div className="flex items-center justify-between border-t border-edge pt-3">
-            <div className="flex items-center gap-1.5 text-xs text-mist">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  apiOnline === true
-                    ? "bg-emerald-500"
-                    : apiOnline === false
-                      ? "bg-rose-500"
-                      : "bg-amber-400"
-                }`}
-              />
-              <span>
-                {apiOnline === true ? "API Online" : "API Offline"}
+
+          {/* Mobile Footer: Language Selector + Node Status */}
+          <div className="pt-3 border-t border-ink/8 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span
+                  className={`relative inline-flex h-2 w-2 rounded-full ${apiOnline === true
+                      ? "bg-emerald-400"
+                      : apiOnline === false
+                        ? "bg-rose-500"
+                        : "bg-amber-400"
+                    }`}
+                />
+              </span>
+              <span className="text-[10px] font-mono text-mist">
+                {apiOnline === true ? "Punjab Node Live" : "API Offline"}
+
               </span>
             </div>
             <div className="sm:hidden">
