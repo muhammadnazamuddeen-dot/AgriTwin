@@ -77,6 +77,7 @@ interface FarmMapProps {
     areaAcres: number,
     suggestedDistrict?: string
   ) => void;
+  onLocationFound?: (lat: number, lng: number, district?: string) => void;
 }
 
 const DEFAULT_CENTER: LatLngTuple = [32.5736, 74.0782]; // Gujrat, Punjab
@@ -92,6 +93,7 @@ export default function FarmMap({
   farmLabel,
   resetSignal,
   onPolygonDrawn,
+  onLocationFound,
 }: FarmMapProps) {
   const mapRef = useRef<LeafletMap | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -468,12 +470,8 @@ export default function FarmMap({
     setSearchResults([]);
   };
 
-  // ── GPS Locate ────────────────────────────────────────────────────────────
+  // ── GPS & IP Live Locate ──────────────────────────────────────────────────
   const locateMe = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
     const L = leafletRef.current;
     setLocating(true);
     try {
@@ -482,15 +480,15 @@ export default function FarmMap({
       /* ignore */
     }
 
-    const handleSuccess = (pos: GeolocationPosition) => {
-      const c: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+    const applyLocation = async (lat: number, lng: number, fallbackDistrict?: string) => {
+      const c: LatLngTuple = [lat, lng];
       try {
         mapRef.current?.flyTo(c, 16, { duration: 1 });
         if (L && mapRef.current && userLayerRef.current) {
           L.circleMarker(c, {
-            radius: 8,
+            radius: 9,
             color: "#ffffff",
-            weight: 2,
+            weight: 2.5,
             fillColor: "#10b981",
             fillOpacity: 1,
           }).addTo(userLayerRef.current);
@@ -498,7 +496,44 @@ export default function FarmMap({
       } catch {
         /* ignore */
       }
+
+      const district = fallbackDistrict || (await reverseGeocodeDistrict(lat, lng));
+      onLocationFound?.(lat, lng, district);
       setLocating(false);
+    };
+
+    const tryIpFallback = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
+        const res = await fetch(`${apiBase}/farms/ip-location`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.latitude && data.longitude) {
+            await applyLocation(data.latitude, data.longitude, data.district);
+            return;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // Final fallback to default farm center
+      const targetCenter: LatLngTuple = center ?? DEFAULT_CENTER;
+      try {
+        mapRef.current?.flyTo(targetCenter, 15, { duration: 1 });
+      } catch {
+        /* ignore */
+      }
+      setLocating(false);
+    };
+
+    if (!navigator.geolocation) {
+      tryIpFallback();
+      return;
+    }
+
+    const handleSuccess = (pos: GeolocationPosition) => {
+      applyLocation(pos.coords.latitude, pos.coords.longitude);
     };
 
     const handleError = () => {
@@ -506,22 +541,16 @@ export default function FarmMap({
       navigator.geolocation.getCurrentPosition(
         handleSuccess,
         () => {
-          // If browser location fails completely, smoothly center map on farm / default center
-          const targetCenter: LatLngTuple = center ?? DEFAULT_CENTER;
-          try {
-            mapRef.current?.flyTo(targetCenter, 15, { duration: 1 });
-          } catch {
-            /* ignore */
-          }
-          setLocating(false);
+          // If browser location fails completely, use IP-geolocation fallback
+          tryIpFallback();
         },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
       );
     };
 
     navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
-      timeout: 5000,
+      timeout: 4000,
       maximumAge: 30000,
     });
   };

@@ -78,3 +78,40 @@ def test_user_registration_and_login_flow(client):
     logout_res = client.post("/api/v1/auth/logout")
     assert logout_res.status_code == 200
 
+
+def test_registration_empty_phone_and_case_insensitive_login(client):
+    """Test registration with empty phone string converts to NULL and login is case-insensitive."""
+    user1 = {
+        "name": "User One",
+        "email": "User.One@AgriTwin.PK ",
+        "phone": " ",
+        "password": "Password123!",
+    }
+    user2 = {
+        "name": "User Two",
+        "email": "USER.TWO@AGRITWIN.PK",
+        "phone": "",
+        "password": "Password123!",
+    }
+
+    # 1. First user registration with empty phone
+    res1 = client.post("/api/v1/auth/register", json=user1)
+    assert res1.status_code == 201
+    assert res1.json()["email"] == "user.one@agritwin.pk"
+    assert res1.json()["phone"] is None
+
+    # 2. Second user registration with empty phone (must NOT trigger UNIQUE constraint error)
+    res2 = client.post("/api/v1/auth/register", json=user2)
+    assert res2.status_code == 201
+    assert res2.json()["email"] == "user.two@agritwin.pk"
+    assert res2.json()["phone"] is None
+
+    # 3. Login with uppercase & padded email
+    login_res = client.post(
+        "/api/v1/auth/login",
+        json={"email": " USER.ONE@AGRITWIN.PK ", "password": "Password123!"},
+    )
+    assert login_res.status_code == 200
+    assert login_res.json()["user"]["email"] == "user.one@agritwin.pk"
+
+

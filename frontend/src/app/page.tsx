@@ -355,6 +355,21 @@ export default function DashboardPage() {
     []
   );
 
+  // ── Handle live location detected on map ──────────────────────────────────
+  const handleLocationFound = useCallback(
+    (lat: number, lng: number, district?: string) => {
+      setDrawnCentroid([lat, lng]);
+      if (district) {
+        setNewFarmDistrict(district);
+        setDistrictAutoDetected(true);
+      }
+      const detectedCanal = inferCanalFromLocation(district, lat, lng);
+      setNewCanalName(detectedCanal);
+      setCanalAutoDetected(true);
+    },
+    []
+  );
+
   // ── Create farm ─────────────────────────────────────────────────────────
   const handleCreateFarm = async () => {
     if (!newFarmName.trim()) return;
@@ -507,6 +522,7 @@ export default function DashboardPage() {
               farmLabel={selectedFarm?.name ?? "10.24 Acres"}
               resetSignal={drawReset}
               onPolygonDrawn={handlePolygonDrawn}
+              onLocationFound={handleLocationFound}
             />
           </div>
         </div>

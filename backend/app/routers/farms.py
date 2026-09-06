@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models import Crop, Farm, User
 from app.routers.auth import get_current_user
 from app.schemas import CropCreate, CropResponse, CropUpdate, FarmCreate, FarmResponse, FarmUpdate
-from app.services.geo import compute_area_and_centroid, reverse_geocode
+from app.services.geo import compute_area_and_centroid, get_ip_location, reverse_geocode
 from app.core.engine import warabandi_engine, crop_knowledge
 
 router = APIRouter(prefix="/farms", tags=["farms"])
@@ -53,6 +53,12 @@ async def _enrich_geo_fields(data: dict) -> dict:
 async def reverse_geocode_location(lat: float, lon: float):
     """Reverse geocode lat/lon to Pakistani district and province with nearest-centroid fallback."""
     return await reverse_geocode(lat, lon)
+
+
+@router.get("/ip-location")
+async def ip_location_endpoint():
+    """Get location estimate from client IP with Pakistani fallback."""
+    return await get_ip_location()
 
 
 

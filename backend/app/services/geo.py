@@ -195,3 +195,34 @@ async def reverse_geocode(lat: float, lon: float) -> dict:
 
     return {"district": district or ("Gujrat" if is_pk else ""), "province": province or ("Punjab" if is_pk else "")}
 
+
+async def get_ip_location() -> dict:
+    """Resolve location estimate from client IP with fallback to Pakistani centroid."""
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get("https://ipapi.co/json/")
+            if resp.status_code == 200:
+                data = resp.json()
+                lat = data.get("latitude")
+                lon = data.get("longitude")
+                if lat is not None and lon is not None:
+                    geo = find_nearest_district(float(lat), float(lon))
+                    return {
+                        "latitude": float(lat),
+                        "longitude": float(lon),
+                        "district": geo["district"],
+                        "province": geo["province"],
+                        "source": "ip_geolocation",
+                    }
+    except Exception as exc:
+        logger.warning("IP geolocation request failed: %s", exc)
+
+    return {
+        "latitude": 32.5736,
+        "longitude": 74.0782,
+        "district": "Gujrat",
+        "province": "Punjab",
+        "source": "default_pakistan",
+    }
+
+

@@ -36,15 +36,18 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     # Seed demo users on a fresh production/local database (password: password123)
-    pwd_hash = "$2b$12$1kLIODq1P4Z1OwrkeE1QmOVaJg.aGb.Zq5lN41rbldfYN6UcSovNS"
+    from app.routers.auth import _hash_password, _verify_password
+    pwd_hash = _hash_password("password123")
     db = SessionLocal()
 
     def _ensure_demo_user(name: str, email: str, phone: str, role: str) -> User | None:
-        """Create a demo user if missing.  Tolerates phone uniqueness conflicts
-        (e.g. leftover test accounts) by falling back to a NULL phone so the
-        demo login always works."""
+        """Create a demo user if missing or heal invalid password hash."""
         user = db.query(User).filter(User.email == email).first()
         if user:
+            # Heal password hash if corrupted/outdated
+            if not _verify_password("password123", user.hashed_password):
+                user.hashed_password = pwd_hash
+                db.commit()
             return user
         phone_taken = db.query(User).filter(User.phone == phone).first() is not None
         try:
@@ -169,6 +172,20 @@ app.include_router(prices.router, prefix=settings.API_PREFIX)
 app.include_router(opportunities.router, prefix=settings.API_PREFIX)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+# ── Enterprise Security Headers Middleware ────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(self), camera=(), microphone=()"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 # Health & Readiness checks exposed under root and API prefix (/api/v1/health, /api/v1/ready)
 health_router = APIRouter()

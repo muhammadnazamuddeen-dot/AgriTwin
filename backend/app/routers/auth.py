@@ -21,6 +21,27 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
+import time
+from collections import defaultdict
+
+# ── Brute-Force Rate Limiting (15 attempts per 3 minutes per IP/email) ────────
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW_SEC = 180
+_RATE_LIMIT_MAX_ATTEMPTS = 15
+
+
+def _check_rate_limit(key: str) -> None:
+    now = time.time()
+    attempts = [t for t in _login_attempts[key] if now - t < _RATE_LIMIT_WINDOW_SEC]
+    _login_attempts[key] = attempts
+    if len(attempts) >= _RATE_LIMIT_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many authentication attempts. Please wait 3 minutes before trying again.",
+        )
+    _login_attempts[key].append(now)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
@@ -42,11 +63,11 @@ def _create_token(user_id: int, expires_minutes: int | None = None) -> str:
 
 
 def _extract_token(request: Request, bearer_token: str | None) -> str | None:
-    """Extract token from Authorization header or from HttpOnly agri_session cookie."""
+    """Extract token from Authorization header or from HttpOnly agri_session / agri_token cookie."""
     if bearer_token:
         return bearer_token
-    # Fallback to cookie
-    return request.cookies.get("agri_session")
+    # Fallback to cookies
+    return request.cookies.get("agri_session") or request.cookies.get("agri_token")
 
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
@@ -111,14 +132,18 @@ def register(
     db: Session = Depends(get_db),
 ):
     """Register a new user and set secure auth cookie."""
-    existing = db.query(User).filter(User.email == payload.email).first()
+    clean_email = payload.email.strip().lower()
+    _check_rate_limit(clean_email)
+    clean_phone = payload.phone.strip() if payload.phone and payload.phone.strip() else None
+
+    existing = db.query(User).filter(User.email == clean_email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(
-        name=payload.name,
-        email=payload.email,
-        phone=payload.phone,
+        name=payload.name.strip(),
+        email=clean_email,
+        phone=clean_phone,
         role=payload.role or "farmer",
         hashed_password=_hash_password(payload.password),
     )
@@ -135,6 +160,14 @@ def register(
         max_age=86400 * 7,
         path="/",
     )
+    response.set_cookie(
+        key="agri_token",
+        value=token,
+        httponly=False,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
     return user
 
 
@@ -145,7 +178,9 @@ def login(
     db: Session = Depends(get_db),
 ):
     """Authenticate, issue JWT access token, and set HttpOnly session cookie."""
-    user = db.query(User).filter(User.email == payload.email).first()
+    clean_email = payload.email.strip().lower()
+    _check_rate_limit(clean_email)
+    user = db.query(User).filter(User.email == clean_email).first()
     if not user or not _verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,6 +194,14 @@ def login(
         key="agri_session",
         value=token,
         httponly=True,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    response.set_cookie(
+        key="agri_token",
+        value=token,
+        httponly=False,
         samesite="lax",
         max_age=86400 * 7,
         path="/",
@@ -179,6 +222,7 @@ def login(
 def logout(response: Response):
     """Clear the session cookie."""
     response.delete_cookie(key="agri_session", path="/")
+    response.delete_cookie(key="agri_token", path="/")
     return {"status": "ok", "message": "Logged out successfully"}
 
 
