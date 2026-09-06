@@ -149,7 +149,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
               <Link
                 key={item.label}
                 href={targetHref}
-                onClick={(e) => handleNavClick(e, item.href)}
+                onClick={(e: React.MouseEvent<HTMLAnchorElement>) => handleNavClick(e, item.href)}
                 className={`group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all ${
                   isActive
                     ? "bg-brand text-white shadow-md font-semibold"
