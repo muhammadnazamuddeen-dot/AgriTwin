@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
                 "SECRET_KEY must be overridden in production. "
                 "Generate one with: openssl rand -hex 32"
             )
-        print("⚠️  WARNING: Using the default SECRET_KEY (development only). "
+        print("WARNING: Using the default SECRET_KEY (development only). "
               "Set SECRET_KEY in production to prevent JWT forgery.")
 
     Base.metadata.create_all(bind=engine)
