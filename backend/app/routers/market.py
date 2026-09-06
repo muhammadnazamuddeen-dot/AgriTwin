@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Farm, SoilProfile
+from app.models import Farm, SoilProfile, User
+from app.routers.auth import get_current_user
 from app.services.market_price_service import market_price_service
 from app.services.price_prediction_engine import price_prediction_engine
 from app.services.weather_service import weather_service
@@ -88,6 +89,7 @@ async def get_farm_crop_suitability(
     farm_id: int,
     crop: str | None = Query(None, description="Target crop filter (optional)"),
     month: int | None = Query(None, description="Sowing month 1-12 (defaults to current month)"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -95,7 +97,7 @@ async def get_farm_crop_suitability(
     and computes Expected Gross Margin per Acre.
     """
     farm = db.get(Farm, farm_id)
-    if not farm:
+    if not farm or farm.user_id != user.id:
         raise HTTPException(status_code=404, detail="Farm not found")
 
     soil_prof = db.query(SoilProfile).filter(SoilProfile.farm_id == farm.id).first()

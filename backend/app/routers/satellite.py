@@ -18,9 +18,10 @@ router = APIRouter(prefix="/satellite", tags=["satellite"])
 MODIS_SOURCE = "MODIS Terra (MOD13Q1, 250m)"
 
 
-def _get_farm_or_404(db: Session, farm_id: int) -> Farm:
+def _get_farm_or_404(db: Session, farm_id: int, user_id: int) -> Farm:
+    """Return the farm if it exists and belongs to *user_id*."""
     farm = db.get(Farm, farm_id)
-    if not farm:
+    if not farm or farm.user_id != user_id:
         raise HTTPException(status_code=404, detail="Farm not found")
     if farm.latitude is None or farm.longitude is None:
         raise HTTPException(status_code=400, detail="Farm has no coordinates set")
@@ -31,10 +32,11 @@ def _get_farm_or_404(db: Session, farm_id: int) -> Farm:
 async def get_ndvi_series(
     farm_id: int,
     months: int = Query(default=12, ge=1, le=24, description="Months of history"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Fetch a real NDVI time series from NASA MODIS (free, no auth) via the cache."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     series = await get_ndvi_series_cached(
         farm.id, farm.latitude, farm.longitude, months=months, db=db
@@ -63,10 +65,11 @@ async def get_ndvi_series(
 async def get_farm_satellite_stats(
     farm_id: int,
     months: int = Query(default=12, ge=1, le=24),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Phase 6: Calculate full NDVI statistics (mean, min, max, std, trend, canopy category) for a farm polygon."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
 
     series = await get_ndvi_series_cached(
         farm.id, farm.latitude, farm.longitude, months=months, db=db
@@ -141,10 +144,11 @@ async def sync_farm_satellite_data(
 async def get_ndvi(
     farm_id: int,
     days_back: int = Query(default=30, description="Number of days to look back"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Fetch NDVI statistics for a farm polygon from Sentinel Hub API if credentials configured."""
-    farm = _get_farm_or_404(db, farm_id)
+    farm = _get_farm_or_404(db, farm_id, user.id)
     if not farm.geometry_geojson:
         raise HTTPException(status_code=400, detail="Farm has no polygon geometry set")
 
@@ -159,8 +163,13 @@ async def get_ndvi(
 
 
 @router.get("/observations/{farm_id}", response_model=list[SatelliteObservationResponse])
-def get_stored_observations(farm_id: int, db: Session = Depends(get_db)):
+def get_stored_observations(
+    farm_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Get previously stored satellite observations for a farm."""
+    _get_farm_or_404(db, farm_id, user.id)
     return (
         db.query(SatelliteObservation)
         .filter(SatelliteObservation.farm_id == farm_id)

@@ -7,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Farm, SoilProfile
+from app.models import Farm, SoilProfile, User
+from app.routers.auth import get_current_user
 from app.services.weather_service import weather_service
 from app.services.price_prediction_engine import price_prediction_engine
 from app.core.engine import suitability_engine, crop_knowledge
@@ -90,6 +91,7 @@ def _calculate_opportunity(
 async def get_farm_market_opportunities(
     farm_id: int,
     month: int | None = Query(None, description="Sowing month 1-12"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -97,7 +99,7 @@ async def get_farm_market_opportunities(
     ML price predictions, and gross profit estimates into an Opportunity Score (0-100).
     """
     farm = db.get(Farm, farm_id)
-    if not farm:
+    if not farm or farm.user_id != user.id:
         raise HTTPException(status_code=404, detail="Farm not found")
 
     district = farm.district or "Gujrat"
