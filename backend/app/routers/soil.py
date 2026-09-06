@@ -5,7 +5,8 @@ Provides Soil Physics, ISRIC SoilGrids 2.0 Data, Saxton-Rawls Hydraulics, USDA &
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Farm, SoilProfile
+from app.models import Farm, SoilProfile, User
+from app.routers.auth import get_current_user, get_optional_current_user
 from app.services.soil_service import soil_service
 from app.core.engine import soil_engine
 
@@ -18,6 +19,7 @@ async def get_soil_physics(
     latitude: float | None = Query(None, description="Latitude (e.g. 30.81 for Okara)"),
     longitude: float | None = Query(None, description="Longitude (e.g. 73.45 for Okara)"),
     farm_id: int | None = Query(None, description="Optional Farm ID"),
+    user: User | None = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -29,6 +31,9 @@ async def get_soil_physics(
     if farm_id is not None:
         farm = db.get(Farm, farm_id)
         if farm:
+            # Farm-scoped lookups require authentication and ownership
+            if user is None or farm.user_id != user.id:
+                raise HTTPException(status_code=404, detail="Farm not found")
             if farm.latitude and farm.longitude:
                 lat, lon = farm.latitude, farm.longitude
             
@@ -102,7 +107,8 @@ async def get_soil_physics(
 @router.get("/{farm_id}")
 async def get_farm_soil_physics(
     farm_id: int,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Fetch soil physics for a specific registered farm ID."""
-    return await get_soil_physics(farm_id=farm_id, db=db)
+    return await get_soil_physics(farm_id=farm_id, user=user, db=db)

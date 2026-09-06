@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Farm, Crop, SoilProfile
+from app.models import Farm, Crop, SoilProfile, User
+from app.routers.auth import get_current_user
 from app.services.yield_engine import get_yield_prediction
 from app.services.weather_service import weather_service
 from app.services.price_prediction_engine import price_prediction_engine
@@ -42,12 +43,19 @@ class AIExplainResponse(BaseModel):
 
 @router.post("/explain", response_model=AIExplainResponse)
 @router.post("/assistant", response_model=AIExplainResponse)
-async def explain_farm_intelligence(req: AIExplainRequest, db: Session = Depends(get_db)):
+async def explain_farm_intelligence(
+    req: AIExplainRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     farm = None
     if req.farm_id is not None:
         farm = db.get(Farm, req.farm_id)
+        if not farm or farm.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Farm not found")
     if not farm:
-        farm = db.query(Farm).first()
+        # Default to the authenticated user's own first farm instead of any farm in the DB
+        farm = db.query(Farm).filter(Farm.user_id == user.id).order_by(Farm.id).first()
 
     if farm and farm.latitude and farm.longitude:
         weather = await weather_service.get_current_weather_open_meteo(farm.latitude, farm.longitude)

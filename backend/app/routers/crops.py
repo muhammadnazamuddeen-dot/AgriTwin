@@ -7,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Farm, SoilProfile
+from app.models import Farm, SoilProfile, User
+from app.routers.auth import get_optional_current_user
 from app.services.weather_service import weather_service
 from app.core.engine import suitability_engine, crop_knowledge
 from app.schemas import CropSuitabilityItem, CropSuitabilityResponse
@@ -55,6 +56,7 @@ async def get_crop_recommendations(
     day_of_year: int | None = Query(None, description="Day of year 1-366"),
     season: str | None = Query(None, description="Agricultural season (Rabi / Kharif / Zaid)"),
     irrigation: str | None = Query(None, description="Irrigation method (irrigated / rainfed / canal / tubewell)"),
+    user: User | None = Depends(get_optional_current_user),
     soil_type: str | None = Query(None, description="Soil texture type"),
     ph: float | None = Query(None, description="Soil pH"),
     organic_carbon: float | None = Query(None, description="Organic Carbon g/kg"),
@@ -105,9 +107,12 @@ async def get_crop_recommendations(
 
     lat, lon = latitude, longitude
 
-    # If farm_id provided, fetch farm record telemetry from database
+    # If farm_id provided, fetch farm record telemetry from database.
+    # Farm-scoped lookups require authentication and ownership of the farm.
     if farm_id is not None:
         farm = db.get(Farm, farm_id)
+        if not farm or user is None or farm.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Farm not found")
         if farm:
             norm_province = crop_knowledge.normalize_province(farm.province or province, farm.district or district)
             farm_data["province"] = norm_province
