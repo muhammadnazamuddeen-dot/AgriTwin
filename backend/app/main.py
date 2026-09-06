@@ -10,6 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.config import settings
 from app.database import Base, engine, get_db
+from app.models import User
 from app.routers import (
     ai_explain,
     analytics,
@@ -24,6 +25,7 @@ from app.routers import (
     soil,
     weather,
 )
+from app.routers.auth import get_current_user
 
 
 @asynccontextmanager
@@ -32,6 +34,16 @@ async def lifespan(app: FastAPI):
     import datetime
     from app.database import SessionLocal
     from app.models import Crop, Farm, User
+
+    # ── Fail fast on the insecure default SECRET_KEY outside of DEBUG ─────────
+    if settings.SECRET_KEY == "change-me-in-production-use-openssl-rand-hex-32":
+        if not settings.DEBUG:
+            raise RuntimeError(
+                "SECRET_KEY must be overridden in production. "
+                "Generate one with: openssl rand -hex 32"
+            )
+        print("⚠️  WARNING: Using the default SECRET_KEY (development only). "
+              "Set SECRET_KEY in production to prevent JWT forgery.")
 
     Base.metadata.create_all(bind=engine)
 
@@ -202,8 +214,12 @@ def ready_check_prefixed():
 
 
 @health_router.post("/assistant", response_model=ai_explain.AIExplainResponse)
-async def assistant_prefixed(req: ai_explain.AIExplainRequest, db=Depends(get_db)):
-    return await ai_explain.explain_farm_intelligence(req, db)
+async def assistant_prefixed(
+    req: ai_explain.AIExplainRequest,
+    user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    return await ai_explain.explain_farm_intelligence(req, user, db)
 
 
 app.include_router(health_router, prefix=settings.API_PREFIX)
